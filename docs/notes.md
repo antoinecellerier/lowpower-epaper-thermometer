@@ -302,6 +302,19 @@ All figures are config-specific: panel, sensor and board all matter. Supply
 node is not recorded for the July entries; the readme lists them as
 `@3V3 rail` (see Open items).
 
+## Results
+
+One row per rig; the linked entries hold conditions, n and captures. A cell with
+no figure to quote says why.
+
+| Rig | Deep-sleep floor | Wake + refresh | Successful resync | Daily budget | Node | Date | Entry |
+|---|---|---|---|---|---|---|---|
+| FireBeetle E + BMP390L + Z90 | ~19.4 µA | 112 mC | unmeasured (failed: 1.5 C / 4.5 C) | ~7.1 C/day (1.68 C floor + ~48 refreshes × 112 mC) | not recorded (July); 3300 mV source 2026-07-25 | July 2026 | [-Os](#compile-at--os-july-2026), [C6 skip-validate and -Os](#c6-skip-validate-and--os-combined-july-2026) (floor), [base snapshot cost](#flash-history-archive-base-snapshot-cost-esp32-e-2026-07-25) (budget) |
+| XIAO C6 + BMP581 + T81 via DESPI-C02 | ~15.8 µA | 45.3 mC, taken at the `0xE8` waveform; does not carry over to the corrected LUT and no replacement is quoted until one is integrated (2026-08-11) | unmeasured | unmeasured | `@3V3 rail` per the 2026-08-11 entry; July node unrecorded | July 2026 | [skip-validate and -Os](#c6-skip-validate-and--os-combined-july-2026) |
+| XIAO C6 + BMP581 + I6FD, Seeed ePaper board | 21.7 µA `@4V2 bat` (~25.1 µA `@3V3 rail`) | 10.05 mC `@4V2 bat` (12.21 mC `@3V3 rail`) | ~117 mC / 1.8 s | 2.12 C/day, ~680 days on 400 mAh | `@4V2 bat`, BAT pads | 2026-07-26 (rail figures 2026-07-05) | [measured budget](#c6-epaper-rig-measured-budget-2026-07-26), [rail-fed](#seeed-xiao-epaper-driver-board-rail-fed-floor-and-refresh-2026-07-05) |
+| rev A board 1 + BMP581 + GDEM0154I61 | 18.3 µA | 23.8-24.6 mC (n=8) | unmeasured; the budget transfers the 117 mC XIAO figure, which the 2026-08-11 house-AP entries supersede for boards behind that router | ~2.0 C/day quiet, ~3.0 volatile, 480-710 days on 400 mAh at full capacity, LEDs enabled | `@4V2 bat`, J1 | 2026-07-29 | [budget](#budget-as-measured-2026-07-29-thermometer-c6-board-1), [hour-long capture](#thermometer-c6-rev-a-board-1-hour-long-capture-2026-07-29-evening) |
+| rev A board 2 + BMP581 + T81, the deployment configuration | 19.05 µA | 36.77 mC (n=5) | 248 mC static lease; 321 mC (244-422) hotspot | **~2.3 C/day quiet, ~3.8 volatile**, 380-620 days on 400 mAh | `@4V2 bat`, J1 | 2026-08-11 | [budget](#budget-as-measured-2026-08-11-thermometer-c6-board-2--t81-the-deployment-config), [static lease](#wifi-resync-charge-with-a-static-dhcp-lease-board-2--t81-house-ap-2026-08-11), [hotspot](#wifi-resync-charge-board-2--t81-phone-hotspot-2026-08-11) |
+
 ## XIAO ESP32-C6 + BMP581 + GDEH0576T81 (920x680), release build (July 2026)
 
 Parity with the Arduino-era firmware: deep sleep 15.5-16 µA, refresh 3.2 s
