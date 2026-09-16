@@ -699,7 +699,16 @@ windows holding different fractions of the post-wake transient read
 Debug-build figures (`PPK2_DEBUG`, +4-6 mC per wake) compare only with
 debug-build figures. Reading rules: `/device-session`.
 
+Two single-capture observations from the same session (2026-07-26). The 4.3 µA
+capture contained 8 samples reading 17-20 A, as bit-identical quartets at two
+moments; the PPK2 tops out near 1 A, so they are decode artifacts, and four of
+them inside a 500k-sample bin add ~160 µA to its mean. The `4c0bbef` capture
+showed no post-wake transient at all, flat 57 s at 26 µA, so the transient's
+magnitude varies between runs, sometimes to zero; mechanism unidentified.
+
 Open (2026-07-26, XIAO rigs):
+- why the `4c0bbef` capture had no post-wake transient (self-heating fits the
+  shape, nothing proves it);
 - non-refresh CPU wake charge (the 2.3% estimate; every captured wake refreshed);
 - failed resync charge on the C6: 1.5 C (association timeout) and 4.5 C (plus
   SNTP timeout) are ESP32-E figures assumed to transfer;
