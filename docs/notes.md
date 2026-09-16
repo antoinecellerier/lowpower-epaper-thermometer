@@ -71,13 +71,13 @@ Wifi was disabled.
 DS18B20 temperature measurement last ~750ms
 
 DS18B20 with normal delay during measurement:
-![DS18B20 normal delay during measurement](thermometer-normal.jpg)
+![DS18B20 normal delay during measurement](photos/thermometer-normal.jpg)
 
 DS18B20 with light sleep during measurement:
-![DS18B20 light sleep during measurement](thermometer-with-light-sleep.jpg)
+![DS18B20 light sleep during measurement](photos/thermometer-with-light-sleep.jpg)
 
 BMP390L during measurement (no display):
-![BMP390L temperature measurement](thermometer-bmp390l.jpg)
+![BMP390L temperature measurement](photos/thermometer-bmp390l.jpg)
 
 # ULP coprocessor power measurements (March 2026)
 
@@ -138,7 +138,7 @@ with 10kΩ pull-up to 3.3V. See [`docs/wiring.md`](wiring.md) for circuit detail
 - `epd_power_on()` drives GPIO13 LOW + 10ms delay before display init
 - `epd_power_off()` drives GPIO13 HIGH after display hibernate
 
-![BMP390L + ULP + P-FET temperature measurement](thermometer-deepsleep-pfet.png)
+![BMP390L + ULP + P-FET temperature measurement](captures/thermometer-deepsleep-pfet.png)
 
 ### Adafruit 1.54" eInk breakout — tested and rejected
 
@@ -291,8 +291,8 @@ PPK2 GPIO markers (reuse existing scheme from ESP32-E): tag LP-core-active and H
 Setup: XIAO ESP32-C6 + BMP581 (I2C on GPIO6/7, addr 0x47) + GDEH0576T81 e-paper, `seeed_xiao_esp32c6_release` env (USB CDC off, DISABLE_SERIAL). PPK2 at 3.32 V.
 
 - Deep sleep floor: **~14 µA** (steady room temp, no HP wakes in window).
-- LP core wake spike: **~3 ms at ~1 mA** (see `docs/xiao-seeed-esp32c6-bmp581-deep-sleep-i2c-lp-core-read.png`) — matches the expected 3.5–4 ms window (shorter than the 7 ms LP_CORE_IDLE baseline, as predicted after dropping the per-wake OSR write).
-- Screen refresh (GDEH0576T81 full update): **~3.2 s at ~29 mA avg, ~322 mA peak, ~93 mC charge** per refresh (see `docs/xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh.png`). Dominates the energy budget whenever it fires — at one refresh/hour this alone averages to ~26 µA.
+- LP core wake spike: **~3 ms at ~1 mA** (see [`xiao-seeed-esp32c6-bmp581-deep-sleep-i2c-lp-core-read.png`](captures/xiao-seeed-esp32c6-bmp581-deep-sleep-i2c-lp-core-read.png)) — matches the expected 3.5–4 ms window (shorter than the 7 ms LP_CORE_IDLE baseline, as predicted after dropping the per-wake OSR write).
+- Screen refresh (GDEH0576T81 full update): **~3.2 s at ~29 mA avg, ~322 mA peak, ~93 mC charge** per refresh (see [`xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh.png`](captures/xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh.png)). Dominates the energy budget whenever it fires — at one refresh/hour this alone averages to ~26 µA.
 - Gotcha: after a warm reset (reflash or HP restart), PPK2 briefly showed extra ~200 ms spikes on top of the LP-core cadence. They **did not reappear after a full cold boot** (power cycle). Suspected leftover PMU/LP-clock state from the previous run; not investigated further since it's self-clearing.
 
 
@@ -338,8 +338,8 @@ ON during slices for the GPSPI register state, restored to AUTO after.
 
 | Rig | Before | After | Evidence |
 |---|---|---|---|
-| C6/T81, release | 95.4 mC, 3.2 s | **56.25 mC**, ~3.8 s (backstop granularity) | `xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh.png` → `xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh-light-sleep.png` |
-| E/Z90, release, 100 ms backstop | 600 mC (~24 mA spin-wait band over ~21 s) | 139 mC (~6.4 mA avg: ≈40 mC active + ≈100 mC panel drive and floor) | `firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh.png` → `-light-sleep.png` |
+| C6/T81, release | 95.4 mC, 3.2 s | **56.25 mC**, ~3.8 s (backstop granularity) | [`xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh.png`](captures/xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh.png) → [`xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh-light-sleep.png`](captures/xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh-light-sleep.png) |
+| E/Z90, release, 100 ms backstop | 600 mC (~24 mA spin-wait band over ~21 s) | 139 mC (~6.4 mA avg: ≈40 mC active + ≈100 mC panel drive and floor) | [`firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh.png`](captures/firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh.png) → [`firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh-light-sleep.png`](captures/firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh-light-sleep.png) |
 | E/Z90, backstop 100 → 500 ms | 139 mC | ~129 mC | free on latency: the GPIO wake ends each wait |
 
 The estimate was ~27%; light sleep also covers the power-on/off busy waits.
@@ -388,8 +388,8 @@ and `RTC_DATA_ATTR` live in RTC slow memory, overlap check OK.
 | Full refresh event | ~129 mC | 114.5 mC, 19.0 s at 6.01 mA |
 | Deep-sleep floor, retain area powered | 19-20 µA | ~19.4 µA |
 
-Evidence: `firebeetle2-esp32e-bmp390l-GDEH0154Z90-wake-active-phase-skip-validate.png`,
-`firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh-skip-validate.png`.
+Evidence: [`firebeetle2-esp32e-bmp390l-GDEH0154Z90-wake-active-phase-skip-validate.png`](captures/firebeetle2-esp32e-bmp390l-GDEH0154Z90-wake-active-phase-skip-validate.png),
+[`firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh-skip-validate.png`](captures/firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh-skip-validate.png).
 C6 figures: the combined entry below.
 
 ## Flash QIO/80MHz, tried and reverted (July 2026)
@@ -424,8 +424,8 @@ debug envs included (they exist for serial logs, not JTAG stepping).
 Zoomed active phase (1 s window): ~90 ms ROM + bootloader, a one-sample ~405 mA
 spike at EPD power-gate turn-on (boost inrush), a flat ~33 mA band to ~620 ms
 (IDF bring-up + render + SPI push ≈ 12.5 mC), then panel drive. Evidence:
-`firebeetle2-esp32e-bmp390l-GDEH0154Z90-wake-active-phase-Os.png`,
-`firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh-Os.png`.
+[`firebeetle2-esp32e-bmp390l-GDEH0154Z90-wake-active-phase-Os.png`](captures/firebeetle2-esp32e-bmp390l-GDEH0154Z90-wake-active-phase-Os.png),
+[`firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh-Os.png`](captures/firebeetle2-esp32e-bmp390l-GDEH0154Z90-screen-refresh-Os.png).
 
 Running total, E/Z90 per refresh event:
 
@@ -449,9 +449,9 @@ release build; the two effects were separated only on the E above.
 | Binary | 1080 KB | 983 KB |
 | Deep-sleep floors, retain area powered | 15.5-16 µA C6, 19-20 µA E | ~15.8 µA C6, ~19.4 µA E |
 
-Evidence: `xiao-seeed-esp32c6-bmp581-GDEH0576T81-wake-active-phase-pre-skip-validate.png`
-(before), `-wake-active-phase-skip-validate-Os.png` and
-`-screen-refresh-skip-validate-Os.png` (after). A wrong screen/sensor config in
+Evidence: [`xiao-seeed-esp32c6-bmp581-GDEH0576T81-wake-active-phase-pre-skip-validate.png`](captures/xiao-seeed-esp32c6-bmp581-GDEH0576T81-wake-active-phase-pre-skip-validate.png)
+(before), [`xiao-seeed-esp32c6-bmp581-GDEH0576T81-wake-active-phase-skip-validate-Os.png`](captures/xiao-seeed-esp32c6-bmp581-GDEH0576T81-wake-active-phase-skip-validate-Os.png) and
+[`xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh-skip-validate-Os.png`](captures/xiao-seeed-esp32c6-bmp581-GDEH0576T81-screen-refresh-skip-validate-Os.png) (after). A wrong screen/sensor config in
 this session panic-looped at ~600 ms and read as a ~670 µA floor with 25 mA
 pings; the stale e-paper frame is the tell (`/device-session`).
 
@@ -473,8 +473,8 @@ unpowered in this setup (5 V rail dead), so these figures exclude it.
 
 The ±0.7 µA fuzz on the floor at 100 ksps is normal PPK2 low-range noise; the
 average is the figure. Evidence:
-`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-screen-refresh.png`,
-`-deep-sleep-floor.png`, `-1min-overview.png`.
+[`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-screen-refresh.png`](captures/xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-screen-refresh.png),
+[`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-deep-sleep-floor.png`](captures/xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-deep-sleep-floor.png), [`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-1min-overview.png`](captures/xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-1min-overview.png).
 
 ## Seeed XIAO ePaper Driver Board, battery path via the shield JST (2026-07-05)
 
@@ -498,10 +498,10 @@ about a month. The 4.2 V settling coincides with the first LP-core wake at
 ~60 s but is the IC's own standby transition; a µA-scale LP read cannot lower
 the boost duty. Compare refreshes in mJ: the 12.31 mC at 4.2 V matching the
 rail's 12.21 mC is the higher voltage compensating. Evidence:
-`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-battery-path-floor.png`,
-`-eta9740-battery-path-refresh.png`,
-`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-4V2-settling.png`,
-`-eta9740-4V2-settled-floor.png`, `-eta9740-4V2-refresh.png`.
+[`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-battery-path-floor.png`](captures/xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-battery-path-floor.png),
+[`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-battery-path-refresh.png`](captures/xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-battery-path-refresh.png),
+[`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-4V2-settling.png`](captures/xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-4V2-settling.png),
+[`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-4V2-settled-floor.png`](captures/xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-4V2-settled-floor.png), [`xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-4V2-refresh.png`](captures/xiao-seeed-esp32c6-seeed-epd-board-GDEW029I6FD-eta9740-4V2-refresh.png).
 
 ## XIAO C6 battery-direct on the BAT pads, voltage sweep (2026-07-05)
 
@@ -540,11 +540,11 @@ Rail power is 82.9 µW, so the healthy points show ~90% buck efficiency at a
 storm in a minute and 3.6 V dwells intermittently sagged, so ~3.55-3.65 V is a
 bistable hysteresis band. ETA9740 leakage in this configuration: none observed;
 the 22 µA floor matches the rail baseline within buck efficiency. Evidence:
-`xiao-c6-bat-pads-4V2-floor.png`, `-4V2-floor-zoom.png`, `-3V9-floor-after-boot.png`,
-`-3V8-floor.png`, `xiao-c6-bat-pads-3V7-clean-floor.png`, `-3V6-sag-with-storm.png`,
-`-3V5-sag-and-burst-storm.png`, `-3V4-continuous-burst.png`,
-`-3V3-dropout-sawtooth.png`, `-3V3-dropout-sawtooth-zoom.png`,
-`-3V2-bootloop-then-dead.png`.
+[`xiao-c6-bat-pads-4V2-floor.png`](captures/xiao-c6-bat-pads-4V2-floor.png), [`xiao-c6-bat-pads-4V2-floor-zoom.png`](captures/xiao-c6-bat-pads-4V2-floor-zoom.png), [`xiao-c6-bat-pads-3V9-floor-after-boot.png`](captures/xiao-c6-bat-pads-3V9-floor-after-boot.png),
+[`xiao-c6-bat-pads-3V8-floor.png`](captures/xiao-c6-bat-pads-3V8-floor.png), [`xiao-c6-bat-pads-3V7-clean-floor.png`](captures/xiao-c6-bat-pads-3V7-clean-floor.png), [`xiao-c6-bat-pads-3V6-sag-with-storm.png`](captures/xiao-c6-bat-pads-3V6-sag-with-storm.png),
+[`xiao-c6-bat-pads-3V5-sag-and-burst-storm.png`](captures/xiao-c6-bat-pads-3V5-sag-and-burst-storm.png), [`xiao-c6-bat-pads-3V4-continuous-burst.png`](captures/xiao-c6-bat-pads-3V4-continuous-burst.png),
+[`xiao-c6-bat-pads-3V3-dropout-sawtooth.png`](captures/xiao-c6-bat-pads-3V3-dropout-sawtooth.png), [`xiao-c6-bat-pads-3V3-dropout-sawtooth-zoom.png`](captures/xiao-c6-bat-pads-3V3-dropout-sawtooth-zoom.png),
+[`xiao-c6-bat-pads-3V2-bootloop-then-dead.png`](captures/xiao-c6-bat-pads-3V2-bootloop-then-dead.png).
 
 Open:
 - the 3V3 rail was not probed during the 3.5 V quiet phase; the sag is inferred

@@ -27,7 +27,7 @@
 | 3.3V  | 4.7 kOhm | DQ (middle pin)                      |
 | GND   |          | GND (left when looking at flat face) |
 
-![Assembled first prototype](first-prototype.jpg)
+![Assembled first prototype](photos/first-prototype.jpg)
 
 # BMP390L + ePaper setup (ULP-capable)
 
@@ -85,7 +85,7 @@ DESPI-C02 GND ────── GND (direct)
 
 GPIO LOW → display powered on. GPIO HIGH / high-Z (deep sleep) → display off.
 
-![Firebeetle ESP32-E, BMP390L & GDEH0154Z90 (2026)](firebeetle2-esp32e-bmp390l-GDEH0154Z90-prototype.jpg)
+![Firebeetle ESP32-E, BMP390L & GDEH0154Z90 (2026)](photos/firebeetle2-esp32e-bmp390l-GDEH0154Z90-prototype.jpg)
 
 # Xiao Seed ESP32C6 + BMPxxx
 
@@ -174,7 +174,7 @@ MTMS
 3V3
 BOOT
 
-![Seeed Xiao C6, BMP581 & GDEH0576T81 (2026)](seeed-xiao-c6-bmp581-GDEH0576T81-prototype.jpg)
+![Seeed Xiao C6, BMP581 & GDEH0576T81 (2026)](photos/seeed-xiao-c6-bmp581-GDEH0576T81-prototype.jpg)
 
 # Seeed ePaper Driver Board for XIAO vs DESPI-C02 (compatibility notes)
 
@@ -268,7 +268,7 @@ and a refresh on a real cell, which together decide the final shutdown
 threshold — [`hardware/thermometer-c6/BRINGUP.md`](../hardware/thermometer-c6/BRINGUP.md)
 Phase 3.
 
-![Seeed Xiao C6, e-Paper Driver Board, BMP581 & GDEW029I6FD (2026)](seeed-xiao-c6-bmp581-epaperhat-GDEW029I6FD-prototype.jpg)
+![Seeed Xiao C6, e-Paper Driver Board, BMP581 & GDEW029I6FD (2026)](photos/seeed-xiao-c6-bmp581-epaperhat-GDEW029I6FD-prototype.jpg)
 
 # Custom board (thermometer-c6 rev A)
 
@@ -276,7 +276,7 @@ Not covered here — this file is the dev-board prototype wiring. The rev A pin
 map, jumper tables and bench procedures live in
 [`hardware/thermometer-c6/README.md`](../hardware/thermometer-c6/README.md).
 
-![Thermometer C6 rev A board 1 & GDEM0154I61 (2026)](revA-GDEM0154I61.jpg)
+![Thermometer C6 rev A board 1 & GDEM0154I61 (2026)](photos/revA-GDEM0154I61.jpg)
 
-![Thermometer C6 rev A boards 2 and 4 & GDEH0576T81 (2026)](revA-GDEH0576T81.jpg)
+![Thermometer C6 rev A boards 2 and 4 & GDEH0576T81 (2026)](photos/revA-GDEH0576T81.jpg)
 

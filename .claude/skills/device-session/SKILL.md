@@ -254,7 +254,8 @@ Source-meter mode, plus digital channels for correlation, built with
 `sweep` writes to `local/sweeps/` on its own. `live` does not — pass
 `--out local/captures/<name>.csv` and `--raw-out local/captures/<name>.bin`, or
 the capture ends up wherever you happened to be standing and gets lost. Layout:
-`docs/build-system.md`, "Local artifacts".
+`docs/build-system.md`, "Local artifacts". A screenshot kept as evidence goes
+to `docs/captures/`, linked from the logbook entry by path.
 
 ### Confirm the connection before anything is energised — every time
 

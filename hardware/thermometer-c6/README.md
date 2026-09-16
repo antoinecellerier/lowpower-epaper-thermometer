@@ -5,7 +5,7 @@ BMP581 + universal 24-pin EPD interface with on-board gated booster, USB-C
 charging, LDO power tree. Design driven by the PPK2 measurement campaign in
 [`docs/notes.md`](../../docs/notes.md) (repo root).
 
-![Thermometer C6 rev A board & GDEM0154I61 (2026)](../../docs/revA-GDEM0154I61.jpg)
+![Thermometer C6 rev A board & GDEM0154I61 (2026)](../../docs/photos/revA-GDEM0154I61.jpg)
 
 **Status: rev A built and working.** Ordered 2026-07-20
 ([`archive/order-2026-07-20/`](archive/order-2026-07-20/); landed €273.93 ≈

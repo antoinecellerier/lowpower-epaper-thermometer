@@ -2,7 +2,7 @@ A low power ESP32 based thermometer with an ePaper display
 
 | Prototype | Custom board |
 |-----------|--------------|
-|<img src="docs/seeed-xiao-c6-bmp581-GDEH0576T81-prototype.jpg" width="300" />|<img src="docs/revA-GDEM0154I61.jpg" width="300" />|
+|<img src="docs/photos/seeed-xiao-c6-bmp581-GDEH0576T81-prototype.jpg" width="300" />|<img src="docs/photos/revA-GDEM0154I61.jpg" width="300" />|
 
 See [docs/wiring.md](docs/wiring.md) for prototype wiring information and [hardware/thermometer-c6/](hardware/thermometer-c6/README.md) for the custom board. More pictures [lower down](#prototypes-in-action).
 
@@ -120,27 +120,27 @@ The DESPI-C02's boost converter leaks ~534 µA in deep sleep, which an FDN340P P
 
 Custom rev A board (with BMP581), GDEM0154I61 & 400mAh battery
 
-![Thermometer C6 rev A board & GDEM0154I61 (2026)](docs/revA-GDEM0154I61.jpg)
+![Thermometer C6 rev A board & GDEM0154I61 (2026)](docs/photos/revA-GDEM0154I61.jpg)
 
 Custom rev A boards (with BMP581), GDEH0576T81 & 400mAh battery
 
-![Thermometer C6 rev A boards 2 and 4 & GDEH0576T81 (2026)](docs/revA-GDEH0576T81.jpg)
+![Thermometer C6 rev A boards 2 and 4 & GDEH0576T81 (2026)](docs/photos/revA-GDEH0576T81.jpg)
 
 ### 2026 - ultra low power prototypes
 
 Seed Xiao C6, BMP581, GDEH0576T81 & 400mAh battery
 
-![Seeed Xiao C6, BMP581 & GDEH0576T81 (2026)](docs/seeed-xiao-c6-bmp581-GDEH0576T81-prototype.jpg)
+![Seeed Xiao C6, BMP581 & GDEH0576T81 (2026)](docs/photos/seeed-xiao-c6-bmp581-GDEH0576T81-prototype.jpg)
 
 Seeed Xiao C6, e-Paper Driver Board, BMP581, GDEW029I6FD & 400mAh battery
 
-![Seeed Xiao C6, e-Paper Driver Board, BMP581 & GDEW029I6FD (2026)](docs/seeed-xiao-c6-bmp581-epaperhat-GDEW029I6FD-prototype.jpg)
+![Seeed Xiao C6, e-Paper Driver Board, BMP581 & GDEW029I6FD (2026)](docs/photos/seeed-xiao-c6-bmp581-epaperhat-GDEW029I6FD-prototype.jpg)
 
 Firebeetle ESP32-E, BMP390L, GDEH0154Z90 & 400mAh battery
 
-![Firebeetle ESP32-E, BMP390L & GDEH0154Z90 (2026)](docs/firebeetle2-esp32e-bmp390l-GDEH0154Z90-prototype.jpg)
+![Firebeetle ESP32-E, BMP390L & GDEH0154Z90 (2026)](docs/photos/firebeetle2-esp32e-bmp390l-GDEH0154Z90-prototype.jpg)
 
 ### 2021 - first prototype
 Firebeetle ESP32-E, DS18B20, GDEW0213M21 & 2600mAh battery
 
-![Assembled first prototype (2021)](docs/first-prototype.jpg)
+![Assembled first prototype (2021)](docs/photos/first-prototype.jpg)

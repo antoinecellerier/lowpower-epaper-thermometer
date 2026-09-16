@@ -71,5 +71,6 @@ Prose may be rewritten around unchanged data. Gate it with `tools/docinv.py`:
 | `clock-drift.md` | RTC drift rates per board, compensation |
 | `history-store-validation.md` | flash archive results on hardware, and every flash / erase / inject as a device-state row |
 | `footprint.md` | binary size and build time, one row per significant change |
+| `captures/`, `photos/` | every PPK2 screenshot and photo; cite by relative path so the link opens |
 
 `readme.md` gets a one-line pointer to the logbook, never the finding.
