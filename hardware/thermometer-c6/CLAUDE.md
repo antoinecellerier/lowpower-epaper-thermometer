@@ -60,8 +60,7 @@ tables.
 
 ## Physical reality beats inference
 
-Orientation and footprint claims have cost more time on this board than
-everything else combined; J3 and J4 each flipped more than once.
+Orientation and footprint claims are where this board has gone wrong most often.
 
 - **Prove it numerically**, from the STEP file or the datasheet. A community CPL
   rotation table, a part-family analogy, and an eyeballed render have each been
@@ -81,15 +80,12 @@ everything else combined; J3 and J4 each flipped more than once.
 ## Revisions
 
 `circuit.REV` (`generator/circuit.py`) is the single source of truth, consumed by
-`generate.py`, `pcb_layout.SILK`, `pcb.py` and `check_fab.py`. Change it,
-`make check`, `make fab`.
+`generator/generate.py`, `pcb_layout.SILK`, `generator/pcb.py` and
+`verify/check_fab.py`. Change it, `make check`, `make fab`.
 
-**Only the LETTER is committed.** The hash and date are injected at fab-export
-time into the throwaway `out/fab/board/` copy from a clean tree — a file cannot
-contain the hash of the commit that contains it — and `check_fab` asserts the
-committed board carries no stamp, which is what lets a stamp on a physical board
-name an exact commit. **Never bump `REV` retroactively**: the stamp is on boards
-already built, and `archive/order-*/` describes them.
+**Only the LETTER is committed**; hash and date are injected at fab export, so a
+stamp on a physical board names an exact commit (`pcb-fab` skill). **Never bump
+`REV` retroactively**: built boards carry it; `archive/order-*/` describes them.
 
 ## Conventions & traps
 
@@ -97,7 +93,8 @@ already built, and `archive/order-*/` describes them.
   `check_netlist`, must be fully routed (no label fallback).
 - Wire diodes/FETs by function (A/K, G/S/D), never by pin number — numbering
   differs across libraries.
-- Don't "simplify" the transform/field-rotation code in `generate.py` without
+- Don't "simplify" the transform/field-rotation code in `generator/generate.py`
+  without
   re-running a netlist probe; KiCad rotates property text with the symbol and
   mirrors justification at effective 180°.
 - Populate-exactly-one pairs: U5/U6 sensors (both addr 0x47); one RESE jumper
