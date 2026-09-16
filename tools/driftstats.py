@@ -28,10 +28,12 @@ import history  # noqa: E402
 MIN_WINDOW_S = 6 * 3600
 
 
-def select(arc, arm, drop_first):
+def select(arc, arm, drop_first, since=None):
     rows = list(history._drift_rows(arc.drifts))
     if arm is not None:
         rows = [r for r in rows if r[10] == arm]
+    if since:
+        rows = [r for r in rows if r[0] >= since]
     if drop_first:
         rows = rows[1:]
     rows = [r for r in rows if r[2] >= MIN_WINDOW_S]
@@ -85,13 +87,14 @@ def main():
     ap.add_argument("--arm", type=int, help="keep only records with this arm byte")
     ap.add_argument("--drop-first", action="store_true",
                     help="drop the first selected record (reflash-straddled)")
+    ap.add_argument("--since", help="keep records synced at/after this ISO date")
     ap.add_argument("--interval", type=int,
                     help="pinned resync interval in s; counts failed attempts")
     a = ap.parse_args()
 
     with open(a.image, "rb") as f:
         arc = history.Archive(f.read())
-    rows = select(arc, a.arm, a.drop_first)
+    rows = select(arc, a.arm, a.drop_first, a.since)
     if not rows:
         sys.exit("no records selected")
     hourly = [(ts, mn / 10.0, mx / 10.0) for ts, mn, mx, _ in arc.hourly
