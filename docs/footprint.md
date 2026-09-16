@@ -1,4 +1,4 @@
-# Firmware footprint ledger — espidf migration
+# Firmware footprint ledger
 
 ## Summary (migration complete, stages 0→E)
 
@@ -6,7 +6,7 @@ Arduino (baseline) → pure ESP-IDF, both boards, stock platform, no fork:
 
 - **Flash**: ESP32-E release 1196KB → 1014KB (−182KB); C6 release 1265KB → 1072KB
   (−193KB, display enabled). App slot went from 1280KB OTA (~91–97% full) to the
-  3968KB single-app slot in partitions.csv (~26% full) — the flash ceiling is gone.
+  3968KB single-app slot in partitions.csv (~26% full); the flash ceiling is gone.
   What remains is the WiFi floor, not framework overhead: radio+wpa_supplicant
   (~380KB) + lwip (~96KB) + crypto (~127KB) + libc (~81KB); the app itself is
   ~139KB, two-thirds of which is generated font data.
@@ -22,21 +22,22 @@ Arduino (baseline) → pure ESP-IDF, both boards, stock platform, no fork:
 Rows through stage F were measured with the 920x680 + BMP58x config, hand-selected in
 `local-secrets.h` as it worked then; later rows name their own rig, which the env now
 carries via `custom_rig`. The distinction matters: other panel/sensor selections shift
-absolute sizes by tens of KB (font bitmaps dominate app .rodata). The Flash% denominator varies by era: 1280KB
-app0 (baseline/A/B), 4MB board flash (** rows — see *** correction), 3968KB
-partitions.csv slot (F2). `.bin bytes` is the only apples-to-apples column.
+absolute sizes by tens of KB (font bitmaps dominate app .rodata). The Flash%
+denominator changes with the partition table ("Flash% denominator by era" below), so
+`.bin bytes` is the only apples-to-apples column.
 
 Method: `size -A .pio/build/<env>/firmware.elf` (toolchain binutils) + `stat -c%s firmware.bin`.
-DRAM = `.dram0.data` + `.dram0.bss` (+ `.noinit`). Flash% is against the 1280KB `app0` slot
-of the default OTA partition table (baseline; later stages switch to single-app).
-RTC = `.rtc.data` + `.rtc.force_slow` (8KB budget shared with ULP, framework-independent).
+DRAM = `.dram0.data` + `.dram0.bss` (+ `.noinit`). Flash% is against the denominator of
+the row's era. RTC = `.rtc.data` + `.rtc.force_slow` (8KB budget shared with ULP,
+framework-independent). Rows are in date order; each stage letter is unique, and the
+long-form notes for stages L, M, N and O are under the table.
 
-| Stage | Env | .bin bytes | Flash% (1280K) | DRAM bytes | IRAM .text | RTC bytes | Notes |
+| Stage | Env | .bin bytes | Flash% | DRAM bytes | IRAM .text | RTC bytes | Notes |
 |---|---|---|---|---|---|---|---|
 | 0 baseline (Arduino, 21b1055) | esp32e_debug | 1215680 | 92.7% | 49652 | 93663 | 6516 | |
 | 0 baseline | esp32e_release | 1195952 | 91.2% | 49652 | 93663 | 6516 | |
-| 0 baseline | c6_debug | 1272720 | 97.1%* | 44092 | 101184 | 6428 | *bin incl. padding; PIO reports 93.7% flash |
-| 0 baseline | c6_release | 1264896 | 96.5%* | 43980 | 100928 | 6428 | fork platform, Arduino precompiled libs |
+| 0 baseline | c6_debug | 1272720 | 97.1% | 44092 | 101184 | 6428 | bin incl. padding (both C6 entries); PIO reports 93.7% flash for c6_debug |
+| 0 baseline | c6_release | 1264896 | 96.5% | 43980 | 100928 | 6428 | fork platform, Arduino precompiled libs |
 | A idf-i2c/helpers | esp32e_debug | 1213344 | 92.0% | 49508 | 92635 | 6516 | DFRobot_BMP3XX + Wire dropped |
 | A | esp32e_release | 1193648 | 90.5% | 49508 | 92635 | 6516 | −2.3KB bin vs baseline |
 | A | c6_debug | 1273104 | 94.0% | 44012 | 101176 | 6428 | ~flat (Wire→i2c_master, both already in libs) |
@@ -45,53 +46,75 @@ RTC = `.rtc.data` + `.rtc.force_slow` (8KB budget shared with ULP, framework-ind
 | B | esp32e_release | 1138400 | 86.4% | 49008 | 92635 | 6516 | −57KB bin vs stage A |
 | B | c6_debug | 1208016 | 89.6% | 43492 | 101176 | 6428 | |
 | B | c6_release | 1106528 | 82.3% | 43280 | 90130 | 6428 | −158KB bin vs stage A |
-| C pure espidf (C6) | c6_debug | 946816 | 22.6%** | 38164 | 117802 | 6428 | **single-app 4MB partition; −261KB bin vs B; DISABLE_DISPLAY temp. |
-| C | c6_release | 943648 | 22.5%** | 38164 | 117802 | 6428 | fork + Arduino layer gone |
-| D pure espidf (both) | esp32e_debug | 1017824 | 24.3%** | 37980 | 109199 | 6536 | Arduino layer gone; GxEPD2/GFX via arduino_shim |
-| D | esp32e_release | 1014240 | 24.2%** | 37980 | 109199 | 6536 | −124KB bin + −11.5KB DRAM vs B (Arduino) |
-| G multi-SSID WiFi (2026-08-09) | esp32e_release | 966704 | 24.4%*** | 52656 | 91163 | 6564 | **+5008 B vs the commit before** (57b050d). Rig `firebeetle` (200x200 Z90 + BMP390L), NOT the 920x680 config stages 0–F used — absolute DRAM/bin are not comparable to the rows above, the delta is. |
-| G | c6_release | 1061184 | 26.7%*** | 43524 | 109692 | 6472 | +5232 B. Rig `xiao-bigscreen`. Cost is the scan path (`esp_wifi_scan_*`) plus the network table; the RTC hint itself is 1 byte. |
-| D | c6_debug | 1075168 | 25.6%** | 39420 | 127554 | 6428 | display re-enabled (DISABLE_DISPLAY dropped) |
-| D | c6_release | 1071664 | 25.5%** | 39420 | 127554 | 6428 | |
-| F official platform | all four | ≈D | 25-27%*** | ≈D | ≈D | — | espressif32@~6.13.0 (IDF 5.5.3), sizes within noise of D |
-| F2 IDF 6.0.1 | esp32e_debug | — | 26.3%*** | 38344 | — | — | espressif32@^7.0.1, newlib pinned (see sdkconfig.defaults) |
-| F2 | esp32e_release | — | 25.8%*** | 38344 | — | — | +42KB vs IDF 5.5 (newlib mode; picolibc blocked by PIO ulp.py) |
-| F2 | c6_debug | — | 27.9%*** | 39840 | — | — | |
-| F2 | c6_release | — | 27.3%*** | 39840 | — | — | +46KB vs IDF 5.5 |
-| G -Os (was -Og) | esp32e_release | 937632 | 22.9%*** | 47604 | — | — | −77KB bin; CONFIG_COMPILER_OPTIMIZATION_SIZE, wake active phase 22.5→20.6mC |
-| G | c6_release | 983178 | 24.2%*** | 49460 | — | — | −97KB bin; with skip-validate: refresh 56.25→45.3mC |
-| H crash forensics | c6_release | 998400 | 24.6%*** | — | — | — | +15KB bin: espcoredump-to-flash + task-WDT-panic + RTC_NOINIT CrashLog (48B) + on-screen diag |
-| I custom board | thermometer_c6_debug | 1193632 | 29.2%*** | — | — | — | THERMOMETER_C6_BOARD variant: real battery ADC + VBUS sense + EPD float + ext-32k sdkconfig |
-| I | thermometer_c6_release | 1057552 | 25.9%*** | — | — | — | +11KB vs same-tree c6_release (1046480): ADC curve-fitting cali + variant code |
-| J drift telemetry | c6_release | 1041152 | 25.6%*** | 40524 | — | — | measured drift window + ppm history (12B RTC) + wrapped/white-banded status line |
-| K flash history | esp32e_release | 1000768 | 47.7%**** | 39576 | — | 6544 | HistoryStore + NTP bootstrap retry |
-| K | c6_release | 1053536 | 50.2%**** | 40564 | — | 6456 | +12KB bin vs J; **0 bytes RTC** — the store derives its state from flash so `historical_data` doesn't move (60B of ULP_DATA_BASE headroom left on ESP32-E) |
-| L cadence experiment | esp32e_release | 955211 | 45.5% | 44704 | — | — | `! EXP` badge + `REFRESH_EVERY_N_WAKES` + arm byte in the drift record + `git_hash` in the base snapshot. **0 bytes RTC** — the new hash rides in the flash struct, not RTC; `post_build_check_rtc.py` reports **76B of ULP_DATA_BASE headroom**. The delta vs stage K is *not* isolated to this change: many commits separate them. |
-| L | c6_release | 1008186 | 48.1% | 45692 | — | — | Same tree. Bench arms build ~600B *smaller* than the default (E arm 1: 954575) — `ULP_ALWAYS_WAKE` drops the FSM's delta-compare block. |
-| M drift compensation (2026-09-16) | esp32e_release | 961063 | 45.8% | 52696 | — | — | +668 B vs 960395 at `42ba315`, same tree. **+16 B RTC** (`drift_comp_ppm` + the µs anchor): `post_build_check_rtc.py` headroom 64 → 48 B. +4 B in `HistoryDriftState` on flash, zero-fill compatible. C6 builds unchanged (rig flag off). |
-| M upstream GxEPD2 | thermometer_c6_release | 1072544 | 51.1% | 43820 | 109674 | 6472 | Fork retired for stock upstream (`dfbbb6d`), plus the `/PPK2` `/RESYNC` `/REFRESH` lab badges. **The isolated migration delta is −1644 B**, measured same-tree on `thermometer_c6_debug` (1210002 → 1208358) — the only clean number here; the spread against stage L mixes many commits and a different env. **0 bytes RTC** vs stage K's C6 figure: the badges are build-time booleans in `DisplayStats`, which lives on the stack, not in RTC. |
-| N host-supplied LUT | thermometer_c6_release | 1065696 | 50.8% | — | — | — | The T81 waveform LUT now takes the BMP581 reading (`3c91183`, `c2d3ad6`, `1fec0e5`, `7bbe97e`), gated off USB, plus the `/LUT` lab badge and the `FORCE_LUT_TEMPERATURE` bench override. **The isolated feature delta is +342 B**, measured same-tree on `thermometer_c6_debug` (1208704 → 1209046) when the include-order fix made the code actually compile in — the drop against stage M is unrelated commits, not this work. DRAM/IRAM/RTC not re-measured; the change adds no state. |
+| C pure espidf (C6) | c6_debug | 946816 | 22.6% | 38164 | 117802 | 6428 | single-app 4MB partition; −261KB bin vs B; DISABLE_DISPLAY temp. |
+| C | c6_release | 943648 | 22.5% | 38164 | 117802 | 6428 | fork + Arduino layer gone |
+| D pure espidf (both) | esp32e_debug | 1017824 | 24.3% | 37980 | 109199 | 6536 | Arduino layer gone; GxEPD2/GFX via arduino_shim |
+| D | esp32e_release | 1014240 | 24.2% | 37980 | 109199 | 6536 | −124KB bin + −11.5KB DRAM vs B (Arduino) |
+| D | c6_debug | 1075168 | 25.6% | 39420 | 127554 | 6428 | display re-enabled (DISABLE_DISPLAY dropped) |
+| D | c6_release | 1071664 | 25.5% | 39420 | 127554 | 6428 | |
+| F official platform | all four | ≈D | 25-27% | ≈D | ≈D | — | espressif32@~6.13.0 (IDF 5.5.3), sizes within noise of D |
+| F2 IDF 6.0.1 | esp32e_debug | — | 26.3% | 38344 | — | — | espressif32@^7.0.1, newlib pinned (see sdkconfig.defaults) |
+| F2 | esp32e_release | — | 25.8% | 38344 | — | — | +42KB vs IDF 5.5 (newlib mode; picolibc blocked by PIO ulp.py) |
+| F2 | c6_debug | — | 27.9% | 39840 | — | — | |
+| F2 | c6_release | — | 27.3% | 39840 | — | — | +46KB vs IDF 5.5 |
+| G -Os (was -Og) | esp32e_release | 937632 | 22.9% | 47604 | — | — | −77KB bin; CONFIG_COMPILER_OPTIMIZATION_SIZE, wake active phase 22.5→20.6mC |
+| G | c6_release | 983178 | 24.2% | 49460 | — | — | −97KB bin; with skip-validate: refresh 56.25→45.3mC |
+| H crash forensics | c6_release | 998400 | 24.6% | — | — | — | +15KB bin: espcoredump-to-flash + task-WDT-panic + RTC_NOINIT CrashLog (48B) + on-screen diag |
+| I custom board | thermometer_c6_debug | 1193632 | 29.2% | — | — | — | THERMOMETER_C6_BOARD variant: real battery ADC + VBUS sense + EPD float + ext-32k sdkconfig |
+| I | thermometer_c6_release | 1057552 | 25.9% | — | — | — | +11KB vs same-tree c6_release (1046480): ADC curve-fitting cali + variant code |
+| J drift telemetry | c6_release | 1041152 | 25.6% | 40524 | — | — | measured drift window + ppm history (12B RTC) + wrapped/white-banded status line |
+| K flash history | esp32e_release | 1000768 | 47.7% | 39576 | — | 6544 | HistoryStore + NTP bootstrap retry |
+| K | c6_release | 1053536 | 50.2% | 40564 | — | 6456 | +12KB bin vs J; **0 bytes RTC**: the store derives its state from flash so `historical_data` doesn't move (60B of ULP_DATA_BASE headroom left on ESP32-E) |
+| L cadence experiment (2026-08-05) | esp32e_release | 955211 | 45.5% | 44704 | — | — | `! EXP` badge and arm byte; **0 bytes RTC**; notes below |
+| L | c6_release | 1008186 | 48.1% | 45692 | — | — | same tree; bench arms ~600B smaller; notes below |
+| L2 multi-SSID WiFi (2026-08-09) | esp32e_release | 966704 | 24.4% | 52656 | 91163 | 6564 | **+5008 B vs the commit before** (57b050d). Rig `firebeetle` (200x200 Z90 + BMP390L), not the 920x680 config stages 0–F used: absolute DRAM/bin are not comparable to the rows above, the delta is |
+| L2 | c6_release | 1061184 | 26.7% | 43524 | 109692 | 6472 | +5232 B. Rig `xiao-bigscreen`. Cost is the scan path (`esp_wifi_scan_*`) plus the network table; the RTC hint itself is 1 byte |
+| M upstream GxEPD2 (2026-08-11) | thermometer_c6_release | 1072544 | 51.1% | 43820 | 109674 | 6472 | fork retired for stock upstream (`dfbbb6d`); **isolated delta −1644 B**; notes below |
+| N host-supplied LUT (2026-08-11) | thermometer_c6_release | 1065696 | 50.8% | — | — | — | T81 LUT from the BMP581 reading; **isolated delta +342 B**; notes below |
+| O drift compensation (2026-09-16) | esp32e_release | 961063 | 45.8% | 52696 | — | — | +668 B vs `42ba315`; **+16 B RTC**; notes below |
 
-*** Stage F correction: through stages C-D the ACTUAL flashed partition table was
-PlatformIO's default 1MB single-app (PIO ignores the sdkconfig partition choice) —
-the C6 binaries would have failed the bootloader size check on real hardware. The
-official platform's stricter size check exposed it. Fixed with a repo-owned
-partitions.csv (3968KB factory app + 64KB coredump) referenced by both PIO
-(board_build.partitions) and idf.py (CONFIG_PARTITION_TABLE_CUSTOM). Flash%
-figures above marked ** were computed against board flash, not the app slot.
+### Notes per stage
 
-**** Stage K shrank the app slot to 2048KB to make room for the 1920KB `history`
-partition, so the Flash% denominator halves here and the jump from ~26% to ~50%
-is the denominator moving, not the binary growing. As always, `.bin bytes` is
-the only apples-to-apples column. 2048KB still leaves ~2x headroom over a
-~1.05MB binary.
+- **L cadence experiment**: adds the `! EXP` badge, `REFRESH_EVERY_N_WAKES`, an
+  arm byte in the drift record and `git_hash` in the base snapshot. 0 bytes RTC:
+  the new hash rides in the flash struct, not RTC, and `post_build_check_rtc.py`
+  reports 76B of ULP_DATA_BASE headroom. The delta vs stage K is not isolated to
+  this change; many commits separate them. Bench arms build ~600B smaller than
+  the default (E arm 1: 954575) because `ULP_ALWAYS_WAKE` drops the FSM's
+  delta-compare block.
+- **M upstream GxEPD2**: fork retired for stock upstream (`dfbbb6d`), plus the
+  `/PPK2` `/RESYNC` `/REFRESH` lab badges. The isolated migration delta is
+  −1644 B, measured same-tree on `thermometer_c6_debug` (1210002 → 1208358), the
+  only clean number here; the spread against stage L mixes many commits and a
+  different env. 0 bytes RTC vs stage K's C6 figure: the badges are build-time
+  booleans in `DisplayStats`, which lives on the stack, not in RTC.
+- **N host-supplied LUT**: the T81 waveform LUT takes the BMP581 reading
+  (`3c91183`, `c2d3ad6`, `1fec0e5`, `7bbe97e`), gated off USB, plus the `/LUT`
+  lab badge and the `FORCE_LUT_TEMPERATURE` bench override. The isolated feature
+  delta is +342 B, measured same-tree on `thermometer_c6_debug` (1208704 →
+  1209046) once the include-order fix made the code compile in; the drop against
+  stage M is unrelated commits, not this work. DRAM/IRAM/RTC not re-measured; the
+  change adds no state.
+- **O drift compensation**: +668 B vs 960395 at `42ba315`, same tree. +16 B RTC
+  (`drift_comp_ppm` + the µs anchor): `post_build_check_rtc.py` headroom 64 → 48 B.
+  +4 B in `HistoryDriftState` on flash, zero-fill compatible. C6 builds unchanged
+  (rig flag off).
+
+### Flash% denominator by era
+
+| Rows | Denominator | Why |
+|---|---|---|
+| 0, A, B | 1280KB `app0` slot of the default OTA partition table | Arduino-era layout |
+| C, D | 4MB board flash | Through stages C-D the partition table actually flashed was PlatformIO's default 1MB single-app (PIO ignores the sdkconfig partition choice); the C6 binaries would have failed the bootloader size check on real hardware. The official platform's stricter size check exposed it at stage F. Fixed with a repo-owned `partitions.csv` (3968KB factory app + 64KB coredump) referenced by both PIO (`board_build.partitions`) and idf.py (`CONFIG_PARTITION_TABLE_CUSTOM`). |
+| F, F2, G, H, I, J, L2 | 3968KB `partitions.csv` factory slot | L2 (2026-08-09) post-dates K's 2048KB slot; its 24.4% / 26.7% match the 3968KB denominator (23.8% / 26.1% recomputed), so they were computed against the stale slot. Kept as printed; against 2048KB they would read 46.1% / 50.6%, unmeasured. |
+| K, L, M, N, O | 2048KB factory slot | Stage K shrank the app slot to make room for the 1920KB `history` partition; the jump from ~26% to ~50% is the denominator moving, not the binary growing. 2048KB still leaves ~2x headroom over a ~1.05MB binary. |
 
 Behavioral baseline (2026-07-03): sim screenshots saved (28 PNGs, all scenarios render);
 C6 deep-sleep ~15µA (PPK2, prior measurement). Tag: `pre-idf-migration`.
 
 ## Hardware validation (2026-07-03, IDF 6.0.1, PPK2)
 
-Migration parity confirmed on both boards — full measurement details live in
+Migration parity confirmed on both boards; full measurement details live in
 docs/notes.md ("Post-espidf-migration power measurements"); figures are
 config-specific (panel + sensor + board).
 
@@ -105,7 +128,7 @@ config-specific (panel + sensor + board).
   ~10s and tripped the task WDT; fixed by 64-byte write-buffering +
   16KB-interval yields (commits ef95f72, 9c819d3).
 - NTP timed out twice on C6 (30s) while the E synced in ~1s on the same
-  network — matches historical C6 flakiness, predates migration. Caveat:
+  network; this matches historical C6 flakiness and predates migration. Caveat:
   system time survives reset/reflash (RTC timer), so a correct clock after a
   "sync failed" log does NOT prove the sync worked; power-cycle to test.
 
