@@ -4,6 +4,30 @@ Nothing here is read by the generator or the build. These are point-in-time
 snapshots kept so hard-won states can never be lost to a bad harvest or
 later rework.
 
+## Hand-routed snapshots
+
+One row per snapshot, newest last; each links its section below, which holds
+the full provenance. Commit is the one the section names: the generated
+base the GUI copy started from where the section says "Base", otherwise
+the commit the section attaches to the work.
+
+| Snapshot | Commit | What it captured | Gate at harvest |
+|---|---|---|---|
+| [2026-07-12](#hand-routed-2026-07-12kicad_pcb) | 6bb2696 | complete GUI hand-routing of M5; outline 49×36; R9 deleted on the board | copper DRC-clean; unconnected = GND only (awaits the M6 pour) |
+| [2026-07-14 rotations-widths](#hand-routed-2026-07-14-rotations-widthskicad_pcb) | ccc9546 (the reroute that followed) | rotation/alignment pass on 11 R/C parts; signal trace-width audit | 0 unconnected |
+| [2026-07-14 48x35-gnd-solved](#hand-routed-2026-07-14-48x35-gnd-solvedkicad_pcb) | 06161f6 (the outline shrink) | 48×35 outline reclaimed; GND pour re-closed by hand (56 GND tracks, 44 stitch vias) | unconnected 0, REAL=0 (2 dangling GND stubs deferred), `check_pcb` OK |
+| [2026-07-15 gnd-spof-fixes](#hand-routed-2026-07-15-gnd-spof-fixeskicad_pcb) | not recorded | intermediate mid GND-hardening (mtime 00:37); superseded by the next row | not recorded |
+| [2026-07-15 neck-eastcap-spof](#hand-routed-2026-07-15-neck-eastcap-spofkicad_pcb) | 0abdc4c | north F.Cu GND neck re-laced; east-cap second stitch; ~30 nets re-synced | DRC REAL=0, unconnected=0, starved_thermal=0; `make check` green |
+| [2026-07-15 reroute-pass](#hand-routed-2026-07-15-reroute-passkicad_pcb) | bf49e23 | ~30 nets tidied, ~56 fewer signal segments; DBG_TX graphic-line slip reproduced as a track on harvest | DRC REAL=0, unconnected=0, starved_thermal=0; `make check` green; byte-stable |
+| [2026-07-15 widen-antenna](#hand-routed-2026-07-15-widen-antennakicad_pcb) | c6bf143 | every trace ≥0.25mm; 27-pad B.Cu GND neck widened; antenna-side cleanup | DRC REAL=0, unconnected=0, starved=0; `make check` green; byte-stable |
+| [2026-07-16 gnd-loop](#hand-routed-2026-07-16-gnd-loopkicad_pcb) | cc6d380 | full-board GND loop return path; narrow-neck SPOFs 11→0 | DRC REAL=0, unconnected=0, starved=0; `make check` green; byte-stable |
+| [2026-07-16 h1-clearance](#hand-routed-2026-07-16-h1-clearancekicad_pcb) | cd3a9e4 | VBAT + EPD_SCK moved off H1 (2.32mm → 3.05mm); NE GND re-stitched | 0 unconnected; `make check` green |
+| [2026-07-17 mounthole-q1](#hand-routed-2026-07-17-mounthole-q1kicad_pcb) | aa55505 | H1/H2 repositioned ≥1mm from every edge; Q1/R22/R23 moved; via_dangling 0 | 0 unconnected, 0 DRC, courtyards_overlap=0; `make check` green; byte-stable |
+| [2026-07-19 j4-fanout-reroute](#hand-routed-2026-07-19-j4-fanout-reroutekicad_pcb) | 77c3ebd | J4 24-pin fanout; ~30 signal nets re-laid; 9 testpoints moved | DRC REAL=0, unconnected=0, schematic-parity=0; `make check` green; 5 silk warnings deferred |
+| [2026-07-20 j3-usb-reroute](#hand-routed-2026-07-20-j3-usb-reroutekicad_pcb) | 26cebbc | J3 USB routing to the new pad row; 5 parts moved; D1 CPL delta reset | DRC REAL=0, unconnected=0, schematic-parity=0; `make check` green; 6 silk warnings deferred |
+| [2026-07-20 cleanup-round](#hand-routed-2026-07-20-cleanup-roundkicad_pcb) | e567982 | C14 re-placed; +3V3 staircase straightened; 2 zero-length stubs deleted; silk cleanup | DRC REAL=0, DEFERRED=0, unconnected=0, schematic-parity=0; silk 0 violations; 2 J3 edge waivers remain |
+| [2026-07-20 corner-round-usb-reroute](#hand-routed-2026-07-20-corner-round-usb-reroutekicad_pcb) | a93ffa9 (the section's commit) | corner-round and USB reroute pass; button-row move; RST/BOOT/back-footer silk; the last snapshot before the order | 0 unconnected, DRC REAL=0 and DEFERRED=0 at full severity |
+
 ## hand-routed-2026-07-12.kicad_pcb
 
 The user's complete GUI hand-routing of M5, verbatim as routed (copied from
@@ -179,8 +203,8 @@ kept). The session:
 
 Harvested: `pcb_routes.py` (signals, `--all`), `pcb_layout.py` PLACE (9 TPs via
 `hand_diff --apply`), STITCH (**+6 / −9** vias, 0.6/0.3 overrides preserved),
-GND TRACKS (re-authored from the hand board, 41→42 polylines). Gate: `make
-check` green; **DRC REAL=0, unconnected=0, schematic-parity=0**; `check_pcb`
+GND TRACKS (re-authored from the hand board, 41→42 polylines). Gate:
+`make check` green; **DRC REAL=0, unconnected=0, schematic-parity=0**; `check_pcb`
 green incl. the §9 J4 mouth-east orientation guard. hand_diff A–F/H clean; its G
 (signal) shows sub-µm residual only — every net's board/authored segment counts
 match (topology faithful), differing by `extract_tracks` 3dp rounding on the
@@ -306,7 +330,8 @@ WAIVED=0** at full severity (the first strict pass with zero waivers),
 **The order number is deliberately NOT recorded here** — the owner asked to
 keep it out of the repo. This is a choice, not an omission; do not "fix" it.
 
-**Options ordered.** 5 PCBs / 4 assembled. FR-4, 2 layers, 1.6mm, 1oz outer,
+**Options ordered** (the checklist for the next order is
+[`ORDERING.md` §2 and §3](../ORDERING.md#2-board-fabrication-options)). 5 PCBs / 4 assembled. FR-4, 2 layers, 1.6mm, 1oz outer,
 TG135, min via 0.3mm, outline tolerance ±0.2mm. **ENIG** (1 U"). **Via
 covering: Epoxy Filled & Capped (POFV)**, horizontal electroless copper
 plating. **Mark on PCB: Remove Mark** — the board carries no order-mark token
@@ -320,11 +345,10 @@ cleaning **No**, conformal coating **No** (U5 is a vented sensor). JLC grew
 the panel to 70×71mm for its own edge rails; depanel-before-delivery Yes.
 X-Ray inspection auto-added.
 
-**Cost.** PCB €64.49 + Standard PCBA €140.46 = €204.94 merchandise, less a
-€17.46 coupon → €198.94, plus shipping and two charges quoted only after
-review (`Depanel` €2.58, `PCBA remark` "quote after review"). Note the
-advertised "Global Standard Direct Line" shipping is capped to orders under
-$150 and was therefore unavailable — see ORDERING.md §8.
+**Cost.** The itemised quote, the coupon, the shipping cap and the landed
+total are [`ORDERING.md` §8](../ORDERING.md#8-quote-history); the two
+charges quoted only after review (Depanel, and the PCBA remark charged after
+their engineer reads it) are §8 and [§3](../ORDERING.md#3-assembly-options).
 
 **Known items carried into the order, all consciously accepted:**
 - **J3 (USB-C) renders ~1.3mm off its land in JLC's preview.** Established as
