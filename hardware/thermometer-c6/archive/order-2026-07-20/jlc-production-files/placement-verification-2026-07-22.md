@@ -1,20 +1,18 @@
 # Independent placement verification — JLC order SMT026072062920 (2026-07-22)
 
-Performed by an Opus 4.8 subagent against
-`jlc-placement-confirm-top-hires.png` (JLC's engineer-adjusted "Confirm
-Parts Placement" 2D view), cross-checked against the CPL, the KiCad
-board's actual pad geometry (`verify/pads.py`), the rotation checklist,
-and the JLC BOM listing screenshots. Verdict: **no stop-the-order
-findings** across all 75 placements.
+Performed by an Opus 4.8 subagent against `jlc-placement-confirm-top-hires.png`
+(JLC's engineer-adjusted "Confirm Parts Placement" 2D view), cross-checked
+against the CPL, the KiCad board's actual pad geometry (`verify/pads.py`), the
+rotation checklist, and the JLC BOM listing screenshots. Verdict: **no
+stop-the-order findings** across all 75 placements.
 
 ## Pixel↔mm mapping
 
-Board outline in screenshot pixels: west x=752, east x=3219, north
-y=251, south y=2043 → ≈51.3 px/mm (board 48×35mm). `rel_x = CPL_X −
-100`, `rel_y = −CPL_Y − 100`; `X_px = 752 + 51.40·rel_x`, `Y_px = 251 +
-51.20·rel_y`. Validated on all four edge-cut lines and on J3/J4 centers;
-all 75 predicted centers landed on rendered parts; no board part is
-occluded by page chrome.
+Board outline in screenshot pixels: west x=752, east x=3219, north y=251, south
+y=2043 → ≈51.3 px/mm (board 48×35mm). `rel_x = CPL_X − 100`,
+`rel_y = −CPL_Y − 100`; `X_px = 752 + 51.40·rel_x`, `Y_px = 251 + 51.20·rel_y`.
+Validated on all four edge-cut lines and on J3/J4 centers; all 75 predicted
+centers landed on rendered parts; no board part is occluded by page chrome.
 
 Polarized parts were verified against the KiCad board's pad geometry,
 not prose cues. Note: this board's SOT-23s (Q1/Q2/Q4/Q5/Q6) place pins
@@ -23,7 +21,8 @@ not prose cues. Note: this board's SOT-23s (Q1/Q2/Q4/Q5/Q6) place pins
 
 ## Placement walk — all 75 designators
 
-Verdict key: OK = render matches design intent. rel = board-relative (x from west, y from north), mm.
+Verdict key: OK = render matches design intent. rel = board-relative (x from
+west, y from north), mm.
 
 | Desig | Expected (rel x,y / pkg / orient cue) | Render shows | Verdict |
 |---|---|---|---|
@@ -135,24 +134,17 @@ low-value multiplier (×0.01), not ×1000 — `220K`=2.2Ω, `300K`=3.0Ω
 (family siblings: `2201`=2.2kΩ, `2700`=270Ω, `3001`=3.0kΩ,
 `3300`=330Ω). FOJAN `FR470` = 0.47Ω.
 
-## U5 orientation — positively confirmed (follow-up to the walk above)
-
-A tighter crop of the hires render resolves both independent cues from
-the `verified: 2026-07-18` entry in `generator/fab_cpl.py`:
-
-- lid **vent pinhole at the NW corner** (the pads-7/8 corner — matches
-  the BMP581 datasheet p.69 vent-hole drawing at our rot 90);
-- JLC's numbered **"1" arrow at the SW corner** (pads-1/10 corner,
-  matching our black fab dot).
-
-The lone magenta dot at NW is JLC's unreliable marker — ignored, as
-established in the 2026-07-18 walk. Vent NW, pin 1 SW: U5 orientation
-is verified outright, superseding the "consistent with" caveat below.
-
 ## Residual notes (not blockers)
 
 - U5 (LGA-10): the agent's top-render walk alone could not strongly
-  discriminate orientation (pads underneath) — resolved by the vent
-  pinhole + "1" arrow crop above.
+  discriminate orientation (pads underneath). Follow-up: a tighter crop of
+  the hires render resolves both independent cues from the
+  `verified: 2026-07-18` entry in `generator/fab_cpl.py`: the lid **vent
+  pinhole at the NW corner** (the pads-7/8 corner, matching the BMP581
+  datasheet p.69 vent-hole drawing at our rot 90) and JLC's numbered **"1"
+  arrow at the SW corner** (pads-1/10 corner, matching our black fab dot).
+  The lone magenta dot at NW is JLC's unreliable marker, ignored as
+  established in the 2026-07-18 walk. Vent NW, pin 1 SW: U5 orientation is
+  verified outright, superseding the earlier "consistent with" caveat.
 - SW1/SW2 are 2-net tactile switches, near-symmetric; position/package
   correct and the pin row is on the correct side.
