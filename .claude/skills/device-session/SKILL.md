@@ -88,6 +88,18 @@ the board by `/dev/serial/by-id/*Espressif*`.
 
 `devserial.py` picks a port automatically when you don't pass `--port`.
 
+Port traps recorded in the validation log (dates in `docs/history-store-validation.md`):
+
+- The PPK2 occupies **two** `/dev/ttyACM*` nodes. Two back-to-back uploads
+  aimed at one by-id path race for the port; serialise them.
+- `--baud 921600` fails a `history.py backup --full` read over the CH340;
+  460800 works. The tool's default is still 921600.
+- `history.py`'s automatic backup filename uses the EUI-64 middle bytes
+  (`fffe75`), which are identical across rev A boards 1, 2 and 3 — name the
+  file yourself when more than one board is on the bench.
+- `esptool ... | tail && echo OK` reports success unconditionally: the pipeline
+  status is `tail`'s. Test esptool's exit status directly.
+
 ## 2. Flash
 
 ```bash

@@ -1,238 +1,824 @@
 # Flash history archive — hardware validation log
 
-What has actually been exercised on hardware for `src/HistoryStore.cpp`, and
-how. Append a row per experiment; don't rewrite old ones. Host-only checks live
-in `tools/hstest` and are not repeated here.
+What `src/HistoryStore.cpp` has been shown to do on hardware, and every flash,
+erase, inject and backup that touched a board. Append; never rewrite a data row.
+Host-only checks live in `tools/hstest` and are not repeated here.
 
-Rig unless stated otherwise: **FireBeetle 2 ESP32-E + BMP390L + GDEH0154Z90**,
-`dfrobot_firebeetle2_esp32e_debug`, `/dev/ttyUSB0`, USB-powered.
+Default rig unless a row says otherwise: FireBeetle 2 ESP32-E + BMP390L +
+GDEH0154Z90, `dfrobot_firebeetle2_esp32e_debug`, `/dev/ttyUSB0`, USB-powered.
 
-Rows before 2026-08-05 record `local-secrets.h` contents because the panel and
-sensor were hand-edited there per flash. Since then the env carries its rig
-(`custom_rig` in platformio.ini, headers in `include/rigs/`), so naming the env
-names the hardware and a rig/env mismatch is a compile error. What still
-panic-loops at ~600ms — looking like a huge sleep floor on the PPK2, with a
-stale e-paper frame (old GIT_HASH/time) as the tell — is the right env flashed
-to the wrong physical board.
+Rows before 2026-08-05 name `local-secrets.h` contents, because panel and sensor
+were hand-edited there per flash. Since then the env carries its rig
+(`custom_rig`, `include/rigs/`) and a rig/env mismatch is a compile error. Bench
+procedure, port naming and parked-chip recovery: the `/device-session` skill.
 
-**Redact network names** (CLAUDE.md rule): write `<house-ap>`, `<hotspot>` even
-when quoting a serial log. RSSI, channel, BSSID and reason codes identify nothing.
+Network names are redacted (CLAUDE.md): `<house-ap>`, `<hotspot>`, even inside
+quoted serial logs.
 
-## Plan
+## Rigs and identities
 
-Device-side steps from the implementation plan. Host-side equivalents already
-pass in `make -C tools/hstest`.
+| Rig | Board | Panel / sensor | MAC (efuse) | Archive header MAC | Port |
+|---|---|---|---|---|---|
+| `firebeetle` | FireBeetle 2 ESP32-E | GDEH0154Z90 / BMP390L | `c4:5b:be:8c:4d:b8` | same | `/dev/ttyUSB0`, CH340 (`1a86` by-id) |
+| `xiao-hat` | XIAO ESP32-C6 + Seeed ePaper board | GDEW029I6FD / BMP58x | `58:E6:C5:16:1F:08` | `58:e6:c5:ff:fe:16` | USB-Serial-JTAG, by-id `…16:1F:08` |
+| `xiao-bigscreen` | XIAO ESP32-C6 + DESPI-C02 | GDEH0576T81 / BMP58x | `58:e6:c5:13:9b:e4` | `58:e6:c5:ff:fe:13` | USB-Serial-JTAG, by-id `…13:9B:E4` |
+| rev A board 1 | thermometer-c6 | GDEM0154I61 / BMP581 | `98:88:E0:75:47:9C` | `98:88:e0:ff:fe:75` | by-id `…47:9C` |
+| rev A board 2 | thermometer-c6 | GDEH0576T81 / BMP581 | `98:88:e0:75:48:10` | `98:88:e0:ff:fe:75` | by-id `…48:10` |
+| rev A board 3 | thermometer-c6 | GDEH0576T81 / BMP581 | `98:88:e0:75:47:94` | `98:88:e0:ff:fe:75` | by-id `…47:94` |
+| rev A board 4 | thermometer-c6 | GDEH0576T81 / BMP581 | `10:bd:a3:a8:d3:64` | | by-id `…D3:64` |
 
-| # | Experiment | Why it needs hardware |
+The header stores the EUI-64 form (`esp_efuse_mac_get_default()` expansion), so
+boards 1, 2 and 3 share `fffe75` and `history.py`'s auto-generated backup
+filename does not tell them apart. Name every image explicitly and take identity
+from the dump header. Board 3 differs from board 1 in the last MAC byte only.
+
+## Plan and status
+
+Device-side steps from the implementation plan. Host-side equivalents pass in
+`make -C tools/hstest`.
+
+| # | Experiment | Why it needs hardware | Status |
+|---|---|---|---|
+| 1 | First boot on the new partition table | one-time format over the old app image | PASS 2026-07-25; format timing unmeasured (see erase note under Flash cost) |
+| 2 | Archive accumulates | real ULP wakes, real refresh cadence | PASS 2026-07-25 (sparkline, then hourly at 15:00Z) |
+| 3 | `history.py backup` + `dump --csv` | real esptool over the UART bridge | PASS 2026-07-25 |
+| 4 | Reflash test: history survives `pio run -t upload` | the whole point | PASS 2026-07-25; round-tripped published ppm figures 2026-08-23 |
+| 5 | Power-cycle test: RTC gone, restore + `HOURLY_NO_DATA` gap | | PASS 2026-07-25 (72-row gap fill via injected outage) |
+| 6 | Cold-clock test: unsynced device records nothing, `NOSYNC`, bounded retries | | records nothing: 2026-07-30 (`DISABLE_WIFI` sweeps); bounded retries: 2026-08-09 |
+| 7 | Transport test: baud decisive on this board | | PARTIAL: 921600 works for short reads, fails a `--full` read on the CH340 (2026-08-23); 460800 works |
+| 8 | `erase_flash`: clean start, no boot loop | | PASS, many times; boot loop found and fixed 2026-07-25 |
+| 9 | PPK2: append / base / erase costs vs estimates | | DONE 2026-07-25, below |
+
+## Flash cost of a base snapshot, 2026-07-25 (ESP32-E, PPK2)
+
+A base snapshot costs 7.14 mC, 0.1% of this rig's day. Full setup in
+[`notes.md`](notes.md).
+
+| Quantity | Value | Source |
 |---|---|---|
-| 1 | First boot on the new partition table | one-time format over the old app image; ~475 sector erases |
-| 2 | Archive accumulates | real ULP wakes, real refresh cadence |
-| 3 | `history.py backup` + `dump --csv` | real esptool over the CP2102/CH340 bridge |
-| 4 | **Reflash test** | the whole point: history survives `pio run -t upload` |
-| 5 | Power-cycle test | RTC gone, restore + `HOURLY_NO_DATA` gap |
-| 6 | Cold-clock test | unsynced device records nothing, NOSYNC badge, bounded retries |
-| 7 | Transport test | baud actually decisive on this board |
-| 8 | `erase_flash` | clean start, no boot loop |
-| 9 | PPK2 | append/base/erase costs vs the estimates — **DONE**, see below |
+| Base snapshot | **170.2 ms at 41.94 mA = 7.14 mC** at 3300 mV | PPK2, marker-bounded |
+| Share of ~7.1 C/day at one snapshot/day | 0.1% (hourly cadence would be 2.4%) | arithmetic |
+| Estimate before measuring | 5.6 mC, 27% low: current right (40 vs 41.94 mA), duration wrong | on-device timing covered only the flash calls |
 
-## Measured flash cost — PPK2 confirmed (2026-07-25, ESP32-E)
-
-Full numbers and setup in [`docs/notes.md`](notes.md). Headline: **170.2 ms at 41.94 mA =
-7.14 mC** per base snapshot (3300 mV), which is **0.1%** of this rig's
-~7.1 C/day at the one-per-day snapshot cadence. Hourly would be 2.4%.
-
-### What the RPO actually is
-
-**One hour, for the hourly archive, and the journal alone delivers it.** An
-hourly entry is programmed to flash as its hour finalizes — `journal_append()`
-writes immediately, it is not deferred to the flush — so a reflash, panic or
-battery pull costs at most the hour in progress. The snapshot cadence does not
-enter into it.
-
-The base snapshot covers what the journal does not, and that is a shorter list
-than it first appears:
-
-| Data | RPO | Journal-backed? |
-|---|---|---|
-| Hourly archive | **~1 h** | yes, directly |
-| Drift samples | ~1 day (one per resync) | yes, `REC_DRIFT` |
-| `resync_interval_s`, `resync_fail_count` | 24 h | no — but both re-derive after one sync |
-| 24 h sparkline | 24 h | **no — base only** |
-| Restore anchor | 24 h | **no — `history_store_restore()` bails without a valid base** |
-
-So the snapshot is worth keeping for the anchor and the sparkline, not for the
-archive. `HS_BASE_MAX_RECORDS = 24` keeps it at about a day. Note the sparkline
-gains little from 24 specifically: it is a 24 h window, so a day-old snapshot
-restores a chart whose every point has just aged out. Going finer would fix
-that and cost proportionally more — not taken, since the sparkline refills
-within a day of running.
-
-The cadence used to be an accident: the only non-NTP trigger was a full journal
-sector (256 records, 10.7 days), so it was whatever the adaptive resync interval
-happened to be — 1 day on this rig only because its −5265 ppm drift pins the
-interval at its floor, and up to the 28-day cap on a crystal-equipped board.
-That made the board with the *better* clock the one that could not restore.
-Cost of owning it there goes from ~0.7 to 7.1 mC/day — still 0.1%.
-
-On-device timing of the flash calls alone, which is what the cadence work was
-based on before the PPK2 pass:
+On-device timing of the flash calls alone:
 
 | Phase | Time | Note |
 |---|---|---|
-| erase 2 sectors (8KB) | **104-125 ms** | ~53 ms/sector — set by the flash part, not by CPU speed |
-| program 6.4KB payload | **25 ms** | one page-aligned write |
-| read back + CRC32 | **7-8 ms** | |
-| (marker also brackets) | ~13 ms | CRC32 over the payload + malloc/memcpy |
+| erase 2 sectors (8 KB) | 104-125 ms | ~53 ms/sector, set by the flash part |
+| program 6.4 KB payload | 25 ms | one page-aligned write; three calls (header, RtcHistory, drift) cost 66 ms |
+| read back + CRC32 | 7-8 ms | |
+| marker overhead | ~13 ms | CRC32 over payload + malloc/memcpy |
 
-Writing the payload as three calls (header, RtcHistory, drift block) instead of
-one cost **66 ms** rather than 25: the middle write started mid-page, so nearly
-every 256-byte page took an extra program cycle. Batching into one page-aligned
-write took 21% off the whole snapshot and is simpler code. Estimate before
-measuring was 13 ms for this phase — off by 5x.
+Batching the payload into one page-aligned write took 21% off the snapshot. The
+pre-measurement estimate for the program phase was 13 ms, 5x off. Erase-rate
+extrapolation put the one-time format of 480 sectors at ~26 s (the code's ~24 s
+guess); a full-chip 4 MB `erase_flash` then took 1.7 s (2026-07-26) and 1.2-1.5
+s later, so the format is likely erase-block bound (30 aligned 64 KB blocks) and
+single-digit seconds. Open: the format itself has never been timed.
 
-The estimate that preceded the PPK2 pass was 5.6 mC; actual is 7.14 mC, 27%
-low. The assumed **current** was nearly right (40 vs 41.94 mA) — the error was
-duration, because the on-device timing covered only the flash calls and not
-everything the marker brackets.
+### Recovery point objective
 
-Extrapolation from the erase rate: the one-time format is 480 sectors ≈ 26 s
-(the log's "~24s" guess holds).
+The hourly archive's RPO is one hour, from the journal alone. `journal_append()`
+writes each hourly entry as its hour finalizes, so a reflash, panic or battery
+pull loses at most the hour in progress. The base snapshot covers the rest:
 
-## Clean state (2026-07-25 16:55Z) — ready for the drift collection
+| Data | RPO | Journal-backed? |
+|---|---|---|
+| Hourly archive | **~1 h** | yes |
+| Drift samples | ~1 day (one per resync) | yes, `REC_DRIFT` |
+| `resync_interval_s`, `resync_fail_count` | 24 h | no; both re-derive after one sync |
+| 24 h sparkline | 24 h | no, base only |
+| Restore anchor | 24 h | no; `history_store_restore()` bails without a valid base |
 
-Synthetic test data wiped and a plain build installed. Verified:
+`HS_BASE_MAX_RECORDS = 24` pins the snapshot cadence at about a day. Before that
+the only non-NTP trigger was a full journal sector (256 records, 10.7 days), so
+the cadence was the adaptive resync interval: 1 day on the FireBeetle only
+because its −5265 ppm drift pins the interval at its floor, up to the 28-day cap
+on a crystal board. Owning the cadence raised the cost from ~0.7 to 7.1 mC/day.
+A finer sparkline cadence was not taken: the sparkline refills within a day.
 
-- `esptool erase_flash`, then `pio run -e dfrobot_firebeetle2_esp32e_debug -t upload`
-- running `99390e1`, **no `-dirty`** (tree fully committed), **no PPK2_DEBUG**
-  (no selftest line in the boot log), no `HISTORY_BASE_EVERY_WAKE`
-- archive: `0 hourly, 1 sparkline, 0 drift`, base seq 1 at cursor 0x000000
-- drift block at defaults: `resync_interval_s 86400`, `ppm_hist` all zero,
-  `drift_ppm_count 0`, `last_sync_time` from a real NTP sync on this boot
+## Clean-state recipe (first used 2026-07-25 16:55Z, FireBeetle)
 
-Repeat that recipe if the board ever needs resetting again — anything injected
-by `hstest --inject` must be erased before a real measurement run, or the
-fabricated drift sample joins the retained ring and the first genuine
-measurement is computed against an invented `last_sync_time`.
+```
+esptool erase_flash
+pio run -e dfrobot_firebeetle2_esp32e_debug -t upload
+```
 
-Rig: `firebeetle` (Z90 + BMP390L). This run predates `custom_rig`, so at the time
-it was selected by hand-editing `include/local-secrets.h`.
+Verified on 2026-07-25 at `99390e1`, clean tree, no `PPK2_DEBUG`, no
+`HISTORY_BASE_EVERY_WAKE`: archive `0 hourly, 1 sparkline, 0 drift`, base seq 1
+at cursor 0x000000, drift block at defaults (`resync_interval_s 86400`,
+`ppm_hist` zero, `drift_ppm_count 0`, `last_sync_time` from a real sync).
+Anything injected by `hstest --inject` must be erased before a measurement run,
+or the fabricated drift sample joins the ring and the first real measurement is
+computed against an invented `last_sync_time`.
 
 ## When the archive stops recording
 
-The store degrades rather than panicking a battery device, so nothing else on
-screen changes — the device keeps measuring, charting and refreshing perfectly
-while every hour it should have kept is lost for good. The `! NOARCH` badge is
-the only signal that reaches the panel; `DISABLE_SERIAL` removes the log line
-from release builds.
+The store degrades instead of panicking. The device keeps measuring, charting and
+refreshing while every hour is lost; `! NOARCH` is the only signal that reaches
+the panel, since `DISABLE_SERIAL` removes the log line from release builds.
 
 | Badge | Meaning | What to do |
 |---|---|---|
-| `! NOARCH fmt<N>` | on-flash format N, this firmware speaks another | `history.py backup --full`, then `esptool erase_flash` and reflash |
-| `! NOARCH nopart` | no `history` partition — device is on an old table | reflash; the upload rewrites the partition table |
+| `! NOARCH fmt<N>` | on-flash format N, firmware speaks another | `history.py backup --full`, then `esptool erase_flash` and reflash |
+| `! NOARCH nopart` | no `history` partition, device on an old table | reflash; the upload rewrites the partition table |
 | `! NOARCH io` | an erase or write failed | suspect the flash part; back up if it still reads |
 
-Rendered by `tools/sim` as `mock_*_noarch.png`. It is ranked ahead of the crash
-badge deliberately: a crash's payload is already saved to the coredump
-partition and does not decay, whereas this condition is still destroying data
-every hour it goes unnoticed.
+Rendered by `tools/sim` as `mock_*_noarch.png`. Ranked ahead of the crash badge:
+a crash's payload is already in the coredump partition, this condition is still
+destroying data. `! NOARCH fmt2` has never been photographed on a panel; serial
+line and simulator render are verified (2026-07-25).
 
-## Known cosmetic issue
+## Header timestamp
 
-`store created` in the header is stamped during `store_format()`, which runs in
-`setup()` before the first NTP sync, so on a fresh device it is an epoch-zero
-value. The header sector is written once and never rewritten, so there is
-nowhere to backfill it. `history.py` prints "(before first NTP sync)" rather
-than a 1970 date; not worth a format change.
+`store created` is stamped in `store_format()`, in `setup()` before the first
+NTP sync, and the header sector is never rewritten. On a fresh device it is
+epoch zero, printed by `history.py` as "(before first NTP sync)". With a battery
+holding the RTC through `erase_flash` the fresh format inherits the old wall
+clock instead (board 1, 2026-07-31; board 4, 2026-08-11). Not worth a format
+change. The header's `formatted by` hash is the build that formatted the store,
+not the build that wrote any record; attribute data by the panel hash and this
+log. Example: the hat's header says `built 8712f72`, a commit on no branch: the
+2026-07-26 sensor-identity work was `57d33e4` → `5bf8129` → `8712f72` (19:29-19:32
+CEST), flashed from that state, then squashed into `92da552` at 20:34 and amended
+four times into `431b7b0`. Expect `formatted by` to become unresolvable after a
+squash.
 
-## Observations
+## Device state
 
-| # | Date | Result | Notes |
-|---|------|--------|-------|
-| 1 | 2026-07-25 | **PASS** | Device was on the old table (`factory` 0x10000/3968K, no `history`), confirmed by `esptool read_flash 0x8000`. Upload wrote the app to its new home at 0x1f0000 and the screen came up on `b10cd29` (was `95c7b04-dirty`), so the relocation is real and the panel refreshed normally. First boot then formatted the region and wrote `base snapshot seq 1 (0 hourly, 1 sparkline, cursor 0x000010)`. The format log itself was missed — serial capture started mid-boot — so the ~475-erase timing is still unmeasured. |
-| 3 | 2026-07-25 | **PASS** | `history.py backup` over the CH340 bridge at 921600. Read the right identity off the device: `firebeetle2_esp32e c4:5b:be:8c:4d:b8 (GDEH0154Z90/BMP390L)`, build `b10cd29`. Incremental read did its job — **24576 bytes, not 1920KB**. |
-| 2 | 2026-07-25 | **PARTIAL** | Sparkline records accumulate: 1 → 3 → 6 → 8 over ~7 min of consecutive backups. That is the refresh path (one record per display refresh, on \|Δtemp\| ≥ 0.1°C), not the hourly one — ambient was genuinely ~28.5°C with the sensor 15cm off-board, so this is real noise driving real refreshes, not a tethered-board artifact. `0 hourly` throughout, correctly: the first hourly entry needs a clock-hour boundary. **Hourly accumulation still unverified.** |
-| 4 | 2026-07-25 | **PASS** | The one that matters. Made airtight rather than inferred: `esptool ... --after no_reset write_flash 0x1000/0x8000/0x1f0000`, then the reset pulsed by hand while already capturing, so the log starts at byte zero of the new image's first boot. Result: `RTC history version mismatch — resetting history` / `History restored: 0 hourly, 8 sparkline (base seq 1, +0/7 replayed)`. An earlier capture of a plain `pio run -t upload` had missed the line by starting mid-boot — the restore had worked then too. |
-| 5 | 2026-07-25 | **PARTIAL** | A DTR/RTS reset presents as `rst:0x1 (POWERON_RESET)` and wipes RTC (boot_count back to 1), and restore repopulated 6 sparkline points spanning two flashes. So restore-after-RTC-loss is proven. The `HOURLY_NO_DATA` gap fill is **not** yet exercised — it needs hourly entries to exist first. |
-| 7 | 2026-07-25 | **PARTIAL** | 921600 works on this bridge (CH340, `1a86:` by-id, not the CP2102 the docs assume) for both `read_flash` and `write_flash`. The 115200-vs-921600 timing claim is unmeasured, and the incremental read makes it mostly moot here. |
-| 2 | 2026-07-25 | **PASS** | Hourly path confirmed once the clock crossed 15:00Z: `1 hourly` covering `2026-07-25 14:00:00Z` at 29.0/29.2/29.1 °C — min, max and avg all distinct, so the accumulator works, not just the append. |
-| — | 2026-07-25 | **PASS** | Format 2 (hourly-only journaling) re-formats on first boot as intended, and restores with the sparkline sourced wholly from the base: `History restored: 0 hourly (+0 replayed), 9 sparkline, base seq 13`. |
-| — | 2026-07-25 | **PASS** | **Synthetic archive injection.** `hstest --inject <size> <mac> <now> <file>` builds a full 1920KB image with the *real* store code — so it cannot disagree with what the firmware writes — filled from `MockData.h` and stamped with this board's MAC. `history.py restore` accepted it (MAC matched), and the device came up with `History restored: 720 hourly (+0 replayed), 62 sparkline, base seq 1` and refreshed. Reading it back gives 720 rows spanning 2026-06-25 15:00Z .. 2026-07-25 14:00Z with sane values. This is how to get a populated 30-day chart without waiting 30 days. |
-| — | 2026-07-25 | **PASS** | **30-day chart confirmed against the injected series.** On-screen dip reported at "around July 8"; the coldest day in the injected data is 2026-07-08 at 19.3°C daily avg. Daily aggregates (what the 200x200 panel plots) run 16.8-26.1°C, consistent with the observed 24°C gridline. |
-| — | 2026-07-25 | **PASS** | **24h sparkline confirmed via a ramp.** `--inject ... ramp` replaces the sparkline with a 10.0→30.0°C diagonal at fixed 30min spacing — a shape neither the room nor `MockData.h` produces. Restored as 48 points (100→300 x10, 1800s apart) and observed as a clean diagonal on the panel. Settles that the 24h chart is fed from flash, not from anything compiled in. |
-| — | 2026-07-25 | note | Two earlier observations on the mock sparkline were **not** faults: the flat stretch "up to 0h" is `MockData.h`'s deliberate 6h flat carry-in (a spline regression case; 21:41Z = 23:41 CEST, hence 0h on screen), and >1 point/hour is correct — the 24h chart records per display refresh, only the 30-day chart is hourly. |
-| — | 2026-07-25 | **PASS** | **Restore keeps its anchor and marks the outage it spans** (`1f6552d`). `hstest --inject 1966080 <mac> $(date +%s)-259200` built a 30-day archive whose newest hour is 2026-07-22 17:00Z; `history.py restore` took it and the board booted `f050bfc` with `History restored: 720 hourly (+0 replayed), 62 sparkline, base seq 1`, NTP-syncing at 2026-07-25 18:55:51Z. Read back: 792 hourly rows — the 720 injected ones **still dated 2026-06-22 18:00Z .. 2026-07-22 17:00Z**, unmoved — followed by exactly **72 contiguous `HOURLY_NO_DATA` rows covering the outage**, ending adjacent to the in-progress hour. The decisive part is decoding the base snapshot ring *on its own*, since that is what `Display.h` dates every entry from: the anchor moved 2026-07-22 17:00Z → 2026-07-25 17:00Z while the newest real entry stayed at 2026-07-22 17:00Z / 24.7-24.9-24.8 °C and the ring rolled 72h. The old code made the same anchor move with no fills, re-dating all 720 readings 3 days forward. |
-| — | 2026-07-25 | **PASS** | **A format bump no longer erases the archive** (`19dde9f`). `HS_FORMAT` 2→3, nothing else changed, uploaded, reset pulsed while already capturing: `HistoryStore: on-flash format 2, firmware speaks 3 — archive left intact and DISABLED. Back it up (tools/history.py backup), then erase_flash to start a new one.` No `formatting`, no `restored`, no base write — on that boot or the two after. The partition is **byte-identical** across the exercise: sha256 `bd49a1a6…c774b2`, 1966080 bytes, `cmp` clean. The "before" image was read with `esptool --after no_reset` deliberately — a normal backup's trailing reset lets the working firmware cold-boot and append a legitimate record, which would have confounded the hash. `history.py backup --full` still decoded the disabled archive off the device (792 hourly), so the recovery path the log points at works. |
-| — | 2026-07-25 | **BUG FOUND** | **The journal rebuild boot-looped the device.** Scanning slot by slot meant ~119k `esp_partition_read` calls per pass, which blew the 5s task watchdog: `task_wdt: IDLE0 (CPU 0)` → panic → reboot → repeat, on every cold boot with no base (i.e. every boot after `erase_flash`). Symptom on the bench was subtle: the panel kept a stale frame and `history.py backup` showed `base (none — journal only)`, which reads like "hasn't slept yet" rather than "looping". Fixed by reading 512-byte chunks, skipping all-0xFF chunks outright (an erased journal now costs one read per chunk and no CRC), and yielding to IDLE0 every 256 chunks so the margin does not depend on an estimate. `tools/hstest` now bounds flash *calls*, not bytes — it fails at `2051 flash reads over 2048 slots` if the per-slot scan returns. |
-| — | 2026-07-25 | **PASS** | **Real rebuild measured.** Injected a 720-hour archive, clobbered both base slots, restored: `no base — rebuilt 720 hours from 720 journal records in 2444ms`, then `sparkline backfilled with 24 hourly points`, then a normal boot — no watchdog. 2444ms is ~3x the estimate that replaced a 10x-wrong one, which is why it is logged at runtime now. Dominated by per-call read overhead (~320µs per 512-byte read), so a full journal adds CRC for ~122k slots per pass on top; the yield is what keeps that safe rather than the arithmetic. |
-| — | 2026-07-25 | note | `! NOARCH fmt2` was **not** visually confirmed on the panel — no camera on the bench. The plumbing is verified (serial line correct; `s_flash_format` carries the *on-flash* value, so it reads `fmt2` not `fmt3`) and `tools/sim` renders the badge at all four sizes, but the physical frame is inference. |
-| — | 2026-07-25 | **BUG FOUND** | Injection exposed that `drift_state_load()` trusted flash: an injected `resync_interval_s = 0` puts `next_resync_time` on `now`, so **every wake would bring up WiFi** (1.5-4.5C per failed attempt). Now clamped, and drift samples with a zero measurement window are dropped rather than inflating the on-screen `nN`. Badge went `+0ppm n1` → `-5265ppm n1`. |
-| — | 2026-07-26 | flash | **Different rig: XIAO ESP32-C6 + BMP581 + Seeed ePaper driver board (GDEW029I6FD), `/dev/ttyACM0` (USB-Serial-JTAG, MAC 58:E6:C5:16:1F:08), PPK2-powered at 4.2V via the shield JST.** Env `seeed_xiao_esp32c6_epaper_release`, `PLATFORMIO_BUILD_FLAGS="-DPPK2_DEBUG"`, hash `4c0bbef`. `local-secrets.h` moved from `USE_154_Z90`+`USE_BMP390L` (the FireBeetle rig) to `USE_290_I6FD`+`USE_BMP58x`; original backed up for restore. Previous firmware was `1ed89a3` (2026-07-06) on the **old** table — `factory` at 0x10000, no `history` — after a 19d23h basement run, so this upload is the relocation to `factory` 0x1f0000 and the archive's first appearance on this board. Written with `--before no_reset --after no_reset` so the chip stayed halted in download mode and boot #1 lands on a PPK2 capture rather than on the USB session. No `erase_flash`: the old app's bytes are simply inside the new `history` region, the same starting state as observation #1 on the E. Boot #1 result pending. |
-| — | 2026-07-26 | note | **Probe the XIAO's soldered BAT connector, not the hat's JST2.** JST2 is not the battery input: energising it gives a 0.2ms ~14mA inrush into its own input capacitance and then nothing, which reads exactly like a dead board. Measured on the BAT pads the supply bypasses the shield's ETA9740 path, so the ~330-500µA that path idles at is absent and a sleep-floor figure *is* valid from this wiring — compare against the 22µA @ 4.2V battery-direct datapoint in [`docs/notes.md`](notes.md). |
-| — | 2026-07-26 | flash | Re-armed the first-boot measurement on the C6 ePaper rig: `erase_flash` then reflash of the same `4c0bbef` / `seeed_xiao_esp32c6_epaper_release` / `-DPPK2_DEBUG`, both with `--before no_reset --after no_reset` so one BOOT+RESET covered both operations. Needed because an unpowered PPK2 lead (hat JST2, see note below) meant the board first booted on USB, consuming the one-time format. **Full-chip erase of 4MB took 1.7s**, which argues the archive format is erase-block bound (30 aligned 64KB blocks) rather than the 480 sector erases the ~26s projection assumes — expect single-digit seconds. Unmeasured either way until the trace comes back. |
-| — | 2026-07-26 | flash | C6 ePaper rig to `f07d2c9` (`seeed_xiao_esp32c6_epaper_release`, `-DPPK2_DEBUG`), `--before default_reset --after no_reset`, **no** `erase_flash` — so the archive formatted on the previous boot survives and the one-time format will not recur. Two operational lessons: **nrfconnect holds serial ports exclusively and resets whatever it opens**, which knocked the chip out of download mode mid-session; and **the ttyACM number is not stable** — when the ESP32 dropped off the bus the PPK2 inherited `ttyACM0`, so a hardcoded node sent esptool sync bytes to the PPK2 (harmless, connect failed). Resolve via `find /dev/serial/by-id -name '*Espressif*'`. A poll-and-retry loop on that path flashed successfully with `default_reset` alone the moment the device enumerated, so the BOOT hold is not always needed. |
-| — | 2026-07-26 | flash | C6 ePaper rig to `91f08eb`, `seeed_xiao_esp32c6_epaper_release`, **no `PLATFORMIO_BUILD_FLAGS`** — a true production build: no `PPK2_DEBUG`, so no D0/D1 markers, no `ppk2_selftest()`, GPIO16/17 never touched, and `power_efficient` true so no `! DEBUG` badge. Flashed to test whether the sleep-floor hump seen on `f07d2c9` exists in shipping firmware or is confined to the debug build's pad handling. Analysis must be current-only; the marker-driven paths in `tools/ppk2.py` have nothing to key off. |
-| — | 2026-07-26 | flash | C6 ePaper rig to `e8fb31e`, `seeed_xiao_esp32c6_epaper_release`, `PLATFORMIO_BUILD_FLAGS="-DPPK2_DEBUG"` (1000402 B; the same env without the flag is 1000114 B, which is how to tell the two apart — the selftest's `LOGI` string is eliminated under `DISABLE_SERIAL`, so its absence proves nothing). Verification flash for the code-review fixes: the marker fingerprint is now 80 ms and emitted every wake rather than 400 ms on the first boot only, the unbounded USB flash-hold is gone, and `tools/ppk2.py` reports floor/mean/excess per sleep region with a non-homogeneity warning. Analyse marker captures with `--decimate 1`; the short fingerprint does not survive decimation. |
-| — | 2026-07-26 | flash | **Clean state.** `esptool erase_flash` (full chip, 1.5 s) then `2d90340`, `seeed_xiao_esp32c6_epaper_release`, **no `PLATFORMIO_BUILD_FLAGS`** (1000114 B — the same env with `-DPPK2_DEBUG` is 1000402 B, which is how to tell them apart). Erased deliberately: a sensor ground came loose and a spurious **127.5 °C** reading had been recorded, and with no temperature plausibility gate in the firmware it reached the hourly ring, the sparkline, the boot min/max and `previous_temp` — and through the base snapshot, flash. Archive starts empty; the 30-day chart rebuilds from here. Write verified by esptool exit status, not by pipeline exit status — a watcher loop of the form `esptool ... \| tail && echo OK` reports success unconditionally, because it tests `tail`. |
-| — | 2026-07-26 | **PASS** | **Temperature plausibility gate and unattended sensor recovery.** C6 ePaper rig, `seeed_xiao_esp32c6_epaper_release`, no `PLATFORMIO_BUILD_FLAGS`. Flashed from an uncommitted working tree, so the panel hash was `-dirty` and resolves to no commit — an early version of the gate, before the identity check and the recovery rework. Sensor ground pulled with the device running: panel showed `--.-` with `! SENSOR`, status line `#5 r2 lp1 u4 0d w:ULP mx4.3V`. **Two refreshes across five wakes** — one into the fault, one on recovery, the three intervening wakes silent. `u4` climbing once per wake identifies the failure as a NACKing sensor rather than one returning zeros: both LP-core I2C error paths call `ulp_lp_core_wakeup_main_processor()` unconditionally, so a dead bus costs one CPU wake and one LP program reload per `SLEEP_INTERVAL_S` (60 s on a release build). Left unbounded by decision — rare, and either self-clearing or terminal. |
-| — | 2026-07-26 | **BUG FOUND** | **`lp1` after nine reloads: LP counters cannot survive a reload on their own.** Measured on the C6 ePaper rig during a sustained sensor fault (`u9`, `lp1`). `ulp_lp_core_load_binary()` memsets the whole `CONFIG_ULP_COPROC_RESERVE_MEM` region before copying the program — that is how it initialises `.bss` — so two comments claiming the loader leaves `.bss` alone were wrong, and confining the driver's own zeroing to cold boots changed nothing. The counters are now saved and written back around the load; `prev_temp_c` deliberately is not, because a zero reference is what guarantees the next sample wakes the CPU. |
-| — | 2026-07-26 | **BUG FOUND** | **A preserved LP delta reference stranded a repaired sensor.** Carrying `prev_temp_c` across a reload left it holding a value the LP core had latched from a floating bus during the fault, within `TEMP_DELTA_THRESHOLD_C` of the real room. Ground reconnected, sensor reading correctly, no delta produced, CPU never woken, panel blanked — until warming the sensor by hand supplied a change large enough to wake it. Recovery would otherwise have waited on the hourly safety net. Wakes are delta-triggered, not periodic, which is also why nothing that counts consecutive wakes can be used to confirm recovery. |
+Every flash, erase and inject. Flags are `PLATFORMIO_BUILD_FLAGS` through
+2026-08-05 and `PLATFORMIO_BUILD_SRC_FLAGS` from 2026-08-09 (every macro is read
+under `src/`, and `scripts/check_ulp_size.py` preprocesses with `build_src_flags`).
+"none" means a production-identical build. Sizes are `firmware.bin` bytes where noted.
 
-| — | 2026-07-26 | note | **A 0.0 °C reading entered the archive on a pre-gate build**, and is still there. 0.0 °C is a plausible room temperature, so a raw `0x000000` from the disconnected sensor ground reached the hourly ring, the sparkline and, through the base snapshot, flash. The archive dates from the `2d90340` clean-state erase earlier the same day, so discarding it costs about a day: `esptool erase_flash` then reflash if the 30-day chart's daily minimum matters more than that day of history. Left in place otherwise — one point, and bounded. || — | 2026-07-26 | **CONSTRAINT** | **On the C6 the CPU cannot use the sensor bus once the LP core owns it.** The sensor is wired to one pair of pins (GPIO6/7) that both cores drive; `lp_core_i2c_master_init()` calls `rtc_gpio_init()` on them, setting their `LP_AON_GPIO_MUX_SEL` bit and routing the pads out of the digital GPIO domain, where `i2c_new_master_bus()` cannot reach them. There is no `lp_core_i2c_master_deinit()`, but **`rtc_gpio_deinit()` on both pins clears that bit and hands them back** — the same call the ESP32-E path already makes. Verified against ESP-IDF v6.0.1 source and the C6 API reference; the recipe itself is inferred from the two call sites, not documented by Espressif as a named procedure, and is untested on this board. Caveat: on C6 `rtc_gpio_deinit()` also force-disables the shared LP IO clock gate under an open IDF TODO (IDF-14951), which may disturb other LP peripherals. A second option, also inferred: have the HP side open its bus on the **LP_I2C port** (`i2c_new_master_bus()` with port >= `SOC_HP_I2C_NUM`) rather than HP I2C0, which drives the same hardware block and needs no pin hand-back at all. Measured: with the ground reseated the LP core read the sensor on **28 of 30 cycles (`lp30 e2`)** while every CPU-side read failed and the panel stayed `--.-`. `ulp_lp_core_stop()` does not help: it halts the RISC-V core and touches no GPIO, RTCIO or LP_I2C register. The only successful CPU reads all session were on cold boots, before the LP core existed. Consequences: recovery from a sensor fault must run through the coprocessor, and `verify_ulp_temp()`'s direct re-read — whose comment claims "C6 LP I2C uses dedicated pins, no RTC GPIO deinit needed" — has almost certainly never worked on this board. The ESP32-E is unaffected: it bit-bangs over RTC GPIOs and `release_i2c_pins_to_hp()` hands them back. |
-| — | 2026-07-26 | **PASS** | **Temperature plausibility, fault rendering and diagnosis, on `seeed_xiao_esp32c6_epaper_debug`.** With the sensor ground unplugged: the driver refuses to read a part that did not answer with its chip ID, so the reading is the sentinel and the 127.5 C an undriven bus produces is never formed (the earlier build reported `temp: 127.498032` from the same wiring and relied on it landing outside the range). First boot renders `--.-` with `! SENSOR` — the original defect was rendering nothing at all. Fault state stays quiet: **`r2` across 31 wakes**, one frame at boot and one at the `FAULT_REPAINT_WAKES` heartbeat, which is what makes a wedged device distinguishable from a healthy quiet one. **`lp30 e30 u30` at that heartbeat**: the LP wake counter survived 30 reloads where it previously read `lp1`, since `ulp_lp_core_load_binary()` memsets the whole reserve region and the counters must be carried across by hand. That let `! LP W 0x108` appear for the first time — LP core, trigger write, `ESP_ERR_INVALID_RESPONSE`, i.e. the sensor did not ACK. |
-| — | 2026-07-26 | note | **Serial cannot be captured on wakes on this rig.** USB-Serial-JTAG re-enumerates on every deep-sleep wake, so wake-time `printf` is gone before the host attaches; only the boot after `pio run -t upload -t monitor` is catchable. Worse, the CDC control lines drive the chip — esptool resets it "via RTS pin" — and pyserial asserts DTR on open, which on this board is **GPIO9: both the BOOT strapping pin and the firmware's shutdown button**. Opening the console can therefore strap the chip into the bootloader or press its shutdown button. Treat attaching a monitor as intrusive, and read the panel counters instead. |
-| — | 2026-07-26 | **PASS** | **Unattended fault/recovery cycle, twice, no power cycle.** C6 ePaper rig, `seeed_xiao_esp32c6_epaper_debug`. Sequence: boot with the sensor ground disconnected → `--.- C`; ground reseated → real temperature; ground pulled again → `--.- C`; reseated → real temperature. Recovery runs through the coprocessor, which is the only path that can reach the sensor once LP I2C owns the pins (see the CONSTRAINT row above). The rule that briefly refused a coprocessor reading while the panel showed a fault — intended to force an identity-checked CPU read on the recovery transition — is what broke this, and was reverted: on the C6 it made recovery impossible rather than merely unverified. |
-| — | 2026-07-26 | flash | C6 ePaper rig to `431b7b0`, `seeed_xiao_esp32c6_epaper_release`, **no `PLATFORMIO_BUILD_FLAGS`** (1008016 B). Production build carrying the sensor-identity work. Archive harvested first and found **empty** — `0 hourly, 0 sparkline, 0 drift`, one base snapshot from 17:55:34Z written before the first NTP sync. That is a vacuous pass on "no garbage reached flash": nothing bogus was written, but nothing was written at all, because every reflash during the session wiped RTC and reset `current_hour_start`, so no uninterrupted run spanned a wall-clock hour boundary with a valid clock. The recording path — real hourly entries, and `HOURLY_NO_DATA` for an hour whose readings were all rejected — is still unverified at the storage layer and wants an undisturbed run. |
-| — | 2026-07-29 | flash | **New rig: custom thermometer-c6 rev A, board 1** (MAC 98:88:E0:75:47:9C, USB-Serial-JTAG), USB-powered, no battery, no panel. Env `thermometer_c6_debug`, no `PLATFORMIO_BUILD_FLAGS`, hash `3b42d3a` (clean tree). `local-secrets.h`: `USE_BMP58x` + `DISABLE_DISPLAY` + LEDs enabled (previous config `USE_290_I6FD` backed up in session scratchpad). First boot on factory-blank flash, all clean: **no 32k-XTAL fallback warning** (FC-135 is the RTC slow clock), BMP581 chip ID 0x50 / 29.79°C on LP I2C, battery 4196mV (charger float-held VBAT — no pack attached), base snapshot seq 1 (erase 4ms / program 12ms / verify 4ms), LP core started at 5s poll, deep sleep entered, STATUS LED observed on wake. LP-counter survival and vbus_present() unverified — deferred to the panel-attach step (wake serial is uncapturable on USB-Serial-JTAG; panel footer will carry the counters). |
-| — | 2026-07-29 | flash | **thermometer-c6 board 1 to `91bd4d8`** (`thermometer_c6_debug`, no `PLATFORMIO_BUILD_FLAGS`), `local-secrets.h` now `USE_BMP58x` + `USE_154_GDEY` + LEDs enabled, GDEM0154I61 seated in J4 (unpowered attach). Two flash attempts failed/silent first — lesson relearned on this board: **attaching serial can strap GPIO9/BOOT** (DTR on open), leaving the chip silently parked in the bootloader; resolution was a human RST press with no host process on the port. **First render PASS**: 33.9°C / 16:01 CEST / `4204mV` (float-held node, no pack) / `! DEBUG 5s` / footer `#3 r3 lp2 0d w:ULP mx4.2V 91bd4d8` — `w:ULP` proves an LP-core delta wake drove the frame (LP survives deep sleep), `#3 r3` proves archive continuity across the reflash, and the refresh itself functionally verifies the whole DESPI-clone boost chain on the as-shipped 0.47Ω/10µH jumpers. 33.9°C vs 29.8°C an hour earlier = USB self-heat + bench sun, unquantified (Phase 3 item). |
-| — | 2026-07-29 | flash | **thermometer-c6 board 1 to `cbda104`, `thermometer_c6_release`, no `PLATFORMIO_BUILD_FLAGS`** — true production build (`DISABLE_SERIAL`, 60s interval, no `! DEBUG` badge), `local-secrets.h` unchanged (`USE_BMP58x` + `USE_154_GDEY` + LEDs enabled — LED wake blinks are the only observability concession). Flashed with the chip parked in download mode by a manual BOOT+RST (the poll-for-a-wake-window loop was moot — the port was up the whole time). Purpose: sleep-floor measurement on PPK2 source at J1 (4.0V), EPD_VCC post-hibernate decay at 60s spacing, vbus_present()-false behavior, and the first drift-ppm datapoint on the FC-135. |
-| — | 2026-07-30 | flash | **thermometer-c6 board 1 to `73d4f8a`, `thermometer_c6_debug`** — four uploads: three with no `PLATFORMIO_BUILD_FLAGS`, one with `-DUSB_WINDOW_OBSERVE_CYCLES=2`. `local-secrets.h` unchanged (`USE_BMP58x` + `USE_154_GDEY` + `EPD_POWER_GATE`, LEDs enabled), battery attached (3770mV read), panel seated. **USB flash-service window PASS**: `! USB` badge on panel, port continuously enumerated (45s/45s vs ~1s-on/4s-off when sleeping), **two back-to-back hands-free reflashes at ~18s each with nothing touched**, board returning to the running app rather than parked. `-DUSB_WINDOW_OBSERVE_CYCLES=2` gave exactly two real deep sleeps then the window, and logged `USB host attached, but this sleep is an observe cycle`. `Sleeping with ULP wakeup (timer safety net: 5 s)` confirms the docked safety net replaces the 1h one. **Continuous serial across cycles now works** (six consecutive cycles on one attached port, no re-enumeration) — the XIAO's long-standing capture problem is a consequence of sleeping, not of USJ. Four findings: (a) the manual BOOT+RST park leaves the chip in ROM download mode after `pio upload` (`rst:0x15 (USB_UART_HPSYS),boot:0x10 (USB_BOOT)`, `wait usb download`) and needs a physical RST — flashing *through the window* does not; esptool's `--after watchdog_reset` is not supported on the C6 (falls back to RTS). (b) Attaching any monitor resets the chip — cdc-acm raises DTR/RTS at open — so serial is not usable to diagnose a boot problem here. (c) The host probe is timing-marginal against Linux USB autosuspend (`power/control=auto`, 2000ms): the first probe after a slow boot found no SOF, logged `charger, not a bus`, and the window only opened ~50s later on the re-probe (`! USB` first seen at r14). (d) First frame after any reflash renders `--.-` with `! SENSOR`: cold boot has no coprocessor sample, and the direct read fails with `failed to read BMP58x chip ID` because the LP-IO mux still routes the I2C pins to the LP domain across a chip reset. Sensor read 33.7°C flat while charging — self-heat datapoint, not an equilibrium delta. |
-| — | 2026-07-30 | flash | **thermometer-c6 board 1 to `aec755b` then `ac2647e`, `thermometer_c6_debug`**, no `PLATFORMIO_BUILD_FLAGS`, `local-secrets.h` unchanged, battery attached. Second half of the session, after the fixes the first half's findings prompted. **VBUS GPIO4 wake PASS**: unplugged, `! USB` cleared within one refresh (~300ms debounce plus the forced repaint); replugged, `! USB` back in ~2s. Decisive because VBUS-absent sleep arms the 1h safety net, so anything under a minute can only be the GPIO wake. Window reopened and held the port 25/25s afterwards. **LP-IO pad reclaim PASS, and the failure is intermittent — not the 100% it appeared to be**: five resets taken while the LP core owned the bus (each via a monitor attach), 3 hit `Chip ID read failed — reclaiming I2C pads from the LP domain and retrying` followed by `BMP581 detected (chip ID 0x50)`, 2 read the chip on the first attempt with no reclaim needed. `failed to read BMP58x chip ID` — the string that produced `--.-` — did not occur once, and both post-flash first frames carried a real temperature. Note `rtc_gpio_deinit()` therefore ran on 3 of these boots and the window still opened afterwards, so IDF-14951's shared LP-IO clock gate did not break the wake path in that direction. **IDF-14951 clock gate CLEARED**: the board was then left asleep on battery (≥9min by the presence log; the unplug itself was not timed) and replugged at 20:15:12 — port enumerated at 20:15:13, **~1s**, and the window reopened and held it. That sleep was entered on a boot where `rtc_gpio_deinit()` had run, so the shared LP-IO clock-gate side effect does not break the GPIO4 wake armed in the same domain. Reasoned before, measured now. **Still open**: the sleep floor with the GPIO4 wake armed against the 18.7µA baseline — the one measurement that gates deployment. Thermal: ~33.5°C while parked in the window with the charger running, falling on battery once both stopped, with `w:ULP` delta wakes every cycle during the descent. Absolute numbers not yet captured, so still no equilibrium delta. |
-| — | 2026-07-30 | flash | **thermometer-c6 board 1 to `1d567b6`, `thermometer_c6_debug`, `PLATFORMIO_BUILD_FLAGS="-DBATTERY_SHUTDOWN_DISABLED -DDISABLE_WIFI"`** — bench sweep build for the battery-floor runs (notes.md power logbook, same date). `local-secrets.h` unchanged, battery and USB out, PPK2 sourcing at J1. ~20 power cycles across the sweeps; `DISABLE_WIFI` means no plausible clock, so nothing reached the archive by design (RTC state wiped every step regardless). Superseded the same evening by the `6e2fa64` BOD-probe flash below. |
-| — | 2026-07-30 | flash | **thermometer-c6 board 1 to `6e2fa64`, `thermometer_c6_bod_probe`, `PLATFORMIO_BUILD_FLAGS="-DBATTERY_SHUTDOWN_DISABLED -DDISABLE_WIFI"`** — the BOD-probe build for BRINGUP Phase 3's 3V3-sag-at-refresh check: identical to the sweep build except the brownout detector is raised from 2.51V (level 7) to ~3.27V (level 2, the chip's top setting; IDF calls the level voltages estimates). `local-secrets.h` unchanged, battery out, flashed hands-free through the USB service window. Post-flash the port stayed enumerated across three checks over ~10s and the boot render completed, so this chip's level-2 trip point sits below its running rail — the probe is usable and the `SEL_3` fallback in `sdkconfig.defaults.bod_probe` is not needed. Superseded the next night by the `1e1048e` production flash below — the bench-build chain (shutdown latch off, WiFi dead, raised brownout) is off the device. |
-| — | 2026-07-31 | flash | **thermometer-c6 board 1 to `1e1048e`, `thermometer_c6_release`, no `PLATFORMIO_BUILD_FLAGS`** (1027424 B) — clean production build closing out the battery-floor campaign, carrying the re-derived board-scoped thresholds **3550 warn / 3500 mV shutdown** (from the measured ~300 mV refresh-peak droop; notes.md 2026-07-30/31). Brownout back at the stock 2.51 V, shutdown latch back on, WiFi/NTP back. `local-secrets.h` unchanged, no battery in the JST, flashed hands-free through the USB service window (15.6 s), port stable across two checks 5 s apart post-reset. RTC state wiped by the upload as always; archive intact (nothing reached it during the sweeps by design). Still open before deployment: reattach the battery, and the cold + real-cell BOD-probe runs that decide whether shutdown may drop to 3450. |
-| — | 2026-07-31 | flash | **Clean-flash reset starting the board 1 long-term battery soak: `esptool erase_flash` (1.4 s), then `711c3a4`, `thermometer_c6_release`, no `PLATFORMIO_BUILD_FLAGS` (1027344 B).** `local-secrets.h`: `USE_BMP58x` + `USE_154_GDEY` + `EPD_POWER_GATE` + **`DISABLE_LEDS` (new)** — the bring-up LED observability concession withdrawn for the soak; the −80 B vs yesterday's 1027424 B is the LED path compiled out. Fully charged 400 mAh pack in the JST throughout. Pre-erase archive backed up `--full` (restorable): 46 hourly / 19 sparkline / 0 drift, span 2026-07-29 14:00Z .. 2026-07-31 11:00Z, base seq 2 — session scratchpad `board1-prereset-20260731.bin`. Getting in took a manual BOOT+RST park: the board sat dark on the bus because VBUS was already high off a dumb charger before landing on the computer, so the lone plug-in wake at 14:38:08 CEST probed, missed SOF and classified "charger, not a bus" — second sighting of the 2026-07-30 autosuspend-marginal probe, this time costing the whole service window until the 1 h safety net. Backup → erase → upload all chained against the `/dev/serial/by-id` node. The chip stayed parked after the upload, per the known manual-park behavior: `store created 12:48:12Z` is ~5.5 min after upload completion, i.e. the user's RST press. Post-flash verify backup: fresh store, **base seq 1, 0 hourly / 1 sparkline / 0 drift**, identity `GDEM0154I61/BMP58x` (the pre-erase header still said `GDEW029I6FD`, a fossil of the 2026-07-29 format), panel live with `! USB` and no `! NOSYNC`. Note: `store created` carries a *real* timestamp instead of the documented epoch-zero cosmetic — with the battery holding power, the RTC wall clock rode through `erase_flash` and every reset, so the fresh format inherited the pre-erase NTP time. **Soak t=0 = the verify backup's reset, ~12:50Z**; USB unplugged after (with the battery attached that is a supply handover, not a power cycle). Don't touch USB or esptool mid-soak — harvest at the end. |
-| — | 2026-08-05 | backup | **Clock-drift collection run harvested off the FireBeetle: `history.py backup --full` over the CH340 (`/dev/ttyUSB0`, 1a86 bridge) at 921600, no flash, no erase, `local-secrets.h` untouched.** Device `firebeetle2_esp32e c4:5b:be:8c:4d:b8 (GDEH0154Z90/BMP390L)`, still on `44ba5ba` from the 2026-07-25 clean flash. Read back **254 hourly / 320 sparkline / 10 drift**, base seq 18 written 2026-08-04 21:12:15Z, span 2026-07-25 19:00Z .. 2026-08-05 08:00Z — an unbroken 10d13h run, which is the first time the archive has carried a multi-day deployment end to end rather than a bench session. Image `local/archives/hist-firebeetle2_esp32e-8c4db8-2026-08-05.bin` (full partition, restorable). Two things this proves that the bench passes could not: the **drift journal is uncapped where the RTC ring is not** — 10 records against `DRIFT_PPM_HIST_SIZE` 6, and the 4 the badge had already evicted are the ones that make the duty-cycle correlation significant; and the **journal reproduces the panel exactly**, since recomputing the badge's window-weighted mean over the last six records gives 5063/5038 ppm against `+5063ppm`/`+5037ppm` photographed off the panel on 2026-08-02 and 2026-08-05 (1 ppm of integer truncation). Analysis in [clock-drift.md](clock-drift.md). As always the backup entered download mode and **reset the chip**, ending the run: boot counter, in-progress hour and the drift window are gone, the archive is not. |
-| — | 2026-08-05 | backup | **C6 ePaper hat harvested: `history.py backup --full` over USB-Serial-JTAG (`/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_58:E6:C5:16:1F:08`), no flash, no erase, `local-secrets.h` untouched.** Device `xiao_esp32c6 58:e6:c5:ff:fe:16 (GDEW029I6FD/BMP58x)`, running `431b7b0` (**confirmed on the panel by the operator during the harvest**). Read back **231 hourly / 320 sparkline / 3 drift**, base seq 12 written 2026-08-04 13:40:35Z, span 2026-07-26 19:00Z .. 2026-08-05 09:00Z. Image `local/archives/hist-xiao_esp32c6-fffe16-2026-08-05.bin`. The sleeping C6 is not on the bus at all, so this was done by polling the by-id path and firing esptool on enumeration; it took a manual BOOT+RST park after 229 s, the natural-wake window never being caught. **Two findings that generalise.** First, `built 8712f72` in the header is an **orphaned commit** — on no branch, unreachable from master, no equivalent message in the repo — and the reflog explains it: the 2026-07-26 sensor-identity work existed as `57d33e4`→`5bf8129`→`8712f72` (19:29–19:32 CEST), was flashed from that intermediate state, then squashed into `92da552` at 20:34 and amended four times into `431b7b0`. The header sector is written once at `store_format()` and never rewritten, so **the stamp records the build that formatted the store, not the build that wrote any record** — attribute data by the panel hash and this log, never by the header, and expect the stamp to become unresolvable by `git show` after a squash. Second, **a failed resync is recoverable from the archive despite never being journaled**: a failure re-arms `next_resync_time` without writing, so the next successful `REC_DRIFT` carries a window that is an integer multiple of the interval setting. Here window 2 is 4.017d against a 2d setting, pinning exactly one miss at ~2026-07-29 — which is the only surviving trace of a `! NOSYNC` episode the operator remembered but that left no record of its own. Analysis in [clock-drift.md](clock-drift.md). The backup reset the chip as always; the archive survives. |
-| — | 2026-08-05 | flash | **C6 ePaper hat to `2fa3750`, `seeed_xiao_esp32c6_epaper_release`, `PLATFORMIO_BUILD_FLAGS="-DRESYNC_INTERVAL_MIN=43200 -DEXPERIMENT_ARM=3"` (1008304 B).** Opens the clock-drift phase-2 collection as **arm 3, the vanilla control**: wake and refresh paths untouched, only the resync interval pinned to 12 h so the rig yields ~2 drift samples/day instead of one per 2–3.5 d. It runs vanilla first because it has only 3 drift records ever and therefore no baseline correlation to break — days 0–14 establish one, days 14–28 pin the cadence. `local-secrets.h` swapped from board 1's config (`USE_154_GDEY` + `EPD_POWER_GATE` + `DISABLE_LEDS`) to the hat's (`USE_290_I6FD` + `USE_BMP58x`, no gate, LEDs on, matching what `431b7b0` ran) and **restored to as-found afterwards**; note the panel driver is why this binary is 1008304 B against the 1007988 B the same flags produce under board 1's config. Uploaded over USB-Serial-JTAG against the by-id node while the board was already parked in download mode from the morning's harvest. **No `erase_flash`, deliberately**: the archive carries 231 hourly / 320 sparkline / 3 drift from the previous run and a post-flash backup confirms all of it survived byte-for-byte, which is the first on-device proof that a reflash preserves the archive across an `EXPERIMENT_ARM` change. The old records stay distinguishable because they decode `arm=0` while everything from here decodes `arm=3` — the reason the tag is per-record rather than per-archive. Base is still seq 12 written 2026-08-04 13:40:35Z: a snapshot needs a resync or the journal backstop, not merely a boot, so `last snapshot written by` stays absent until the first 12 h resync lands and will then read `2fa3750`. Header still reads `formatted by 8712f72 (!! orphaned)` — correct and unchanged, since the store header is written once at `store_format()`. |
-| — | 2026-08-05 | **PASS** | **Correction and confirmation for the arm-3 flash above.** That row reasoned the unchanged `base seq 12` meant "a snapshot needs a resync, not merely a boot" — true in general, but not what happened: **the app had not run at all**. The chip was still parked in the ROM bootloader from the morning's manual BOOT+RST, esptool's own reset does not release that park, and the panel was holding its pre-flash frame. Released by the operator pressing RST. The enumeration watch running at the time caught the whole thing: **UP continuously while parked, DOWN at t+146 s (RST), UP at t+148 s, DOWN at t+156 s** — an ~8 s awake window covering boot → WiFi/NTP → render → sleep, then off the bus and staying off. Panel confirmed showing **`! EXP 3 60s`**, which is the first on-device proof of the experiment badge; `EXPERIMENT_ARM` reaches both the screen and the journal as designed. The diagnostic worth keeping: **a parked C6 stays enumerated indefinitely while a healthy one drops off the bus within seconds of rendering**, so "still on the bus" is evidence *against* the app running, not for it — the opposite of the reading that produced the row above. Added to the `/device-session` skill. |
-| — | 2026-08-05 | **PASS** | **FireBeetle to `1ea3cd7`, `dfrobot_firebeetle2_esp32e_release`, `PLATFORMIO_BUILD_FLAGS="-DULP_ALWAYS_WAKE -DDISPLAY_TEMP_DELTA=999.0f -DREFRESH_EVERY_N_WAKES=60 -DRESYNC_INTERVAL_MIN=43200 -DEXPERIMENT_ARM=1"` (961536 B).** Phase-2 **arm 1**: 1440 wakes/day with a repaint every 60th, so both wake and refresh cadence are decoupled from the room and only the refresh count changes at day 14. `local-secrets.h` set to `USE_154_Z90` + `USE_BMP390L` + `EPD_POWER_GATE` + `DISABLE_LEDS`, restored to as-found after. Panel confirmed `! EXP 1 60s`. **Two config facts this flash established the hard way, both previously unrecorded.** (1) **`EPD_POWER_GATE` is mandatory on every DESPI-C02 rig**, not optional: the adapter draws ~534 µA quiescent so an FDN340P gates its 3V3 — GPIO13/D7 on the E, GPIO17/D7 on the plain C6 (`src/Display.cpp:47-56`, `docs/wiring.md`) — and its 10k pull-up holds the P-FET **off** at reset, so a build without the define leaves the panel dark permanently with no diagnostic. The E's 19.4 µA floor is only reachable with the gate live; ungated the rig is ~562 µA. Only the Seeed hat is exempt, `src/Display.cpp:21` `#undef`ing it because that shield hardwires 3V3. (2) **`DISABLE_LEDS` is mandatory on the ESP32-E**: with LEDs enabled the build fails outright on a missing `Adafruit_NeoPixel.h`, which was never vendored into `components/` at the espidf migration. It is a build requirement on this board, not the power concession the 2026-07-31 board-1 row implies. |
-| — | 2026-08-05 | note | **The first drift record of every arm is contaminated — discard it.** `drift_state_load()` restores `resync_interval_s` from the archive and clamps it into `[RESYNC_INTERVAL_MIN, RESYNC_INTERVAL_MAX]`, so a pre-flash 86400 s survives a 43200 s override untouched, and `next_resync_time = last_sync_time + resync_interval_s` (`src/Thermometer.cpp:1077`) schedules the first attempt off the *old* cadence. The override only pins the interval after a sync completes. Consequence: the first post-flash record's window runs from the last pre-flash sync and therefore straddles the regime change — FireBeetle arm 1 lands ~2026-08-05 21:11Z with a ~24 h window covering both, and the hat's arm 3 lands ~2026-08-06 01:00Z with a ~3.5 d one. Both carry the *new* arm byte despite mostly measuring the old regime, so the tag cannot be trusted to exclude them; drop the first record per arm by hand, including at the day-14 crossover. Everything after is on the pinned cadence. |
-| — | 2026-08-05 | note | **The three phase-2 rigs carry three different hashes for identical firmware, and the first log row for the FireBeetle had the wrong one.** `GIT_HASH` is stamped from HEAD at build time, and log rows were committed *between* flashes, so each upload picked up a newer docs-only commit: hat `2fa3750`, FireBeetle `1ea3cd7`, big screen `f5e1749`. `git diff 2fa3750 f5e1749 -- src include ulp components platformio.ini` is empty — all three intervening commits touch only `docs/` and `.claude/`, so the firmware is functionally identical and the binaries differ only in the embedded hash string. The FireBeetle's row originally said `2fa3750`; corrected to `1ea3cd7`, which is **inferred from the commit timeline** rather than read off its panel (the big screen's panel independently confirmed the mechanism by showing `f5e1749`). Confirm at the next harvest: the base snapshot's new `git_hash` field will report it directly once a resync writes one. The generalisable rule is now in the `/device-session` skill — take the hash from `git rev-parse HEAD` at each upload, and when rigs must be comparable, flash them all before committing anything. |
-| — | 2026-08-05 | **PASS** | **Big screen (XIAO C6 + BMP581 + DESPI-C02 + GDEH0576T81) to `f5e1749`, `seeed_xiao_esp32c6_release`, `PLATFORMIO_BUILD_FLAGS="-DRESYNC_INTERVAL_MIN=43200 -DEXPERIMENT_ARM=5"` (1056368 B).** Phase-2 **arm 5, the vanilla control**: wake and refresh paths untouched so it stays usable as a daily thermometer, only the resync pinned to 12 h. Base MAC `58:e6:c5:13:9b:e4` (distinct from the hat's `…16:1f:08`). `local-secrets.h` set to `USE_576_T81` + `USE_BMP58x` + `EPD_POWER_GATE`, LEDs on, restored to as-found after. **The partition-table migration is the substance of this flash and was verified on both sides by reading 0x8000**: before, the old single-app layout (`factory` app at 0x10000/3968K, **no `history`**, coredump at 0x3f0000); after, the repo table (`history` data 0x10000/1920K, `factory` relocated to 0x1f0000/2048K). The upload wrote all three regions — bootloader 0x0, table 0x8000, app 0x1f0000 — with no `erase_flash`; the old app's bytes simply fall inside the new `history` region and the first boot formats over them. **This ends the rig's camera-only era**: its build was `44e56b6` (2026-07-06), which predates the partition entirely, so its 30-day history has never been persistable and the five photographed drift samples in `docs/clock-drift.md` remain the only record of it. Those RTC-resident charts are gone as expected; accumulation starts here. Panel confirmed `! EXP 5 60s` with `f5e1749` in the footer. **Verification backup not taken**: the board woke, was caught at 97 s, and dropped back to sleep between enumerating and pyserial asserting RTS (`OSError: [Errno 71] Protocol error`) — the documented re-enumeration race. Not retried by choice, since on the C6 DTR reaches GPIO9, both the BOOT strap and the firmware's shutdown button, so repeatedly attacking the port of a running board risks parking or shutting it down. Archive health taken instead from the absence of a `! NOARCH` badge, which is what that indicator exists for — **operator confirmed the status line carries `! EXP 5 60s` and nothing else**, so the one-time format of the freshly created 1920K region completed on the first boot. That is the pass condition for this row. |
-| — | 2026-08-05 | **PASS** | **A panel that never answers is now detected, and says so on the LED. Rev A board 2, `thermometer_c6_debug` at `0c29c6e`, rig `revA-bigscreen`, no `PLATFORMIO_BUILD_FLAGS`; USB-powered, no panel and no battery attached.** First on-device run of the EPD fault path. Board 2's MAC read for the first time — `98:88:e0:75:48:10` off its USB-JTAG serial, recorded in the rig header; the archive header stores the EUI-64 form `98:88:e0:ff:fe:75`, which is the documented `esp_efuse_mac_get_default()` expansion, not a new bug. **The measurement that matters: a dashboard render into no panel took `91213ms across 18001 busy slices`, nine consecutive GxEPD2 busy timeouts at its 10 s limit** (91256/18009 on the preceding `6338778` build — repeatable to 0.05 %). Before this change all of that was silent: `_waitWhileBusy` returns void, keeps `_busy_timeout` protected, and prints `Busy Timeout!` only to a console `DISABLE_SERIAL` removes from release builds, so the board burned 91 s per wake driving nothing, forever, while the panel held a frame as convincing as a working one. A stall is therefore **~5x a healthy render, not marginally over it**, which is what makes the 30 s threshold safe rather than lucky. Fault latched on boot 1; every later wake logs `temperature hasn't changed significantly` with no render attempted, so the 91 s is paid once. **Operator confirmed the LED pattern: three short-short-short-long groups, pause, repeat** — the blink deliberately ignores `DISABLE_LEDS`, since a dead panel cannot carry a badge about itself. Sensor and archive unaffected: `BMP581 detected (chip ID 0x50)`, plausible 30-31 °C (USB self-heat), base snapshot seq 1 written, so the board completes boot→render→sleep and keeps archiving the whole time it blinks. Battery read 4202-4250 mV with no pack fitted — the charger holding VBAT, no spurious shutdown. Untested here and still open: whether a *live but wrong* panel drives BUSY normally, which this method would pass. |
-| — | 2026-08-05 | **BUG FOUND** | **The new upload gate registered successfully and never fired — it flashed two wrong-rig images in silence before anyone noticed.** `scripts/upload_gate.py` refuses to flash a rig whose panel disagrees with the `history` header the board already carries, which is the only check that catches *right env, wrong physical board* before a byte is written. It did not work, and the failure mode was the dangerous one: **no output at all, which reads exactly like a pass**. `env.AddPreAction("upload", cb)` resolves the bare string to a SCons **File** node named `upload` that nothing ever builds; `env.AddPreAction(env.Alias("upload"), cb)` creates a *fresh empty* alias rather than finding the platform's, so the introspection that suggested it was itself misleading; and neither phase helps, because PlatformIO registers `upload` with `AddPlatformTarget` **after every extra script has been evaluated**, so at script time there is no node to attach to. Only caught because board 2 was on the bench with an archive stamped `GDEH0576T81` and a deliberate `RIG=revA-smallscreen` upload sailed through twice. Fixed by keying off `COMMAND_LINE_TARGETS` instead of a SCons hook, which also moves the refusal **before** the ~60 s compile: it now aborts in 0.99 s. All three paths then verified on hardware — mismatch refused with the `RIG=revA-smallscreen` hint, `ALLOW_RIG_CHANGE=1` proceeds, matching rig prints `carries GDEH0576T81 — matches rig revA-bigscreen`. The generalisable lesson is not about SCons: **a guard whose failure mode is silence must be tested by making it fail**, because "no complaint" is indistinguishable from "not running". Offline coverage exists too (`python3 scripts/upload_gate.py <archive.bin>` runs every rig against a saved image), and it passed throughout while the real hook was dead — host-side tests could not see this. |
-| — | 2026-08-05 | **PASS** | **Where BUSY-based panel detection stops working, measured three ways on rev A board 2 with a 2021-era GDEY0213M21 spare (`USE_213_M21`, added 2021-11-26 in `361248f`) on the board's 24-pin FPC, as-shipped JP2 0.47Ω + JP5 10µH.** Same board, same sensor, three panel configurations: **no panel** `91213ms / 18001 slices / 9 GxEPD2 timeouts` → `BUSY STUCK`, caught; **wrong panel** (2.13" attached, still running the T81/SSD2677 rig `0c29c6e`) `21281ms / 4016 slices / 2 timeouts` → **no fault reported**; **right panel** (bench rig `revA-213m21`, `fe4c3d5`) `3692–3900ms / 725–726 slices / 0 timeouts` → healthy, real dashboard on screen. **The middle row is the result.** A 2.13" panel driven by the wrong controller's code answers on BUSY well enough that seven of its nine waits complete normally, so the firmware reports a successful render while the operator watches the panel cycle through garbage patterns — confirmed visually, and the panel had already gone visibly dark on plug-in. BUSY liveness proves the panel controller is alive and clocking; **it cannot prove pixels changed**, and no threshold repairs that: a healthy Z90 full refresh is ~15 s against its own 20 s GxEPD2 limit, i.e. it sits *between* the healthy 3.7 s and the wrong-panel 21.3 s here, so tightening to catch this would blank a working panel. **A wrong panel is the upload gate's job, not the firmware's** — which is what the gate exists for, and this run is why it is not redundant with the on-device check. The control was load-bearing, not ceremony: without proving the panel renders correctly under its own driver, the 21.3 s reading could not be separated from a dead panel. Two incidental confirmations: the operator read `fe4c3d9` off the damaged glass against the log's `fe4c3d5`, so **the panel hash is legible-but-misreadable on a degraded screen** — treat a one-character hash discrepancy as a read error before a firmware one; and the heavy visual noise is in the glass, not the drive, since the render repeats byte-identically at 725 slices with zero timeouts. `ALLOW_RIG_CHANGE=1` was required to flash the bench rig over a `GDEH0576T81` header, which is the override working as designed. |
-| — | 2026-08-05 | **PASS** | **A UC8151 panel does drive data back on the wiring as built — first readback ever obtained from any panel here. Rev A board 2 + GDEY0213M21, `RIG=revA-213m21`, `PLATFORMIO_BUILD_FLAGS="-DEPD_PROBE"`, build `434436c-dirty`** (the probe was uncommitted at flash time; it is now `27a74f8`). `display_probe_readback()` sends a command, turns MOSI into an input and bit-bangs eight clocks, **twice per command — once against a pulldown, once against a pullup**. A floating line follows its pull; a driven one gives the same byte both ways, so the discrimination is a control carried inside every run rather than an assumption. Result, stable across three consecutive renders: **`0x70` → `01 0e 00 00`, `0x71` → `13 13`, `0x40` → `d2 00`, all DRIVEN**, while foreign SSD168x commands `0x2f`/`0x1c` and a no-op split `00`/`ff` — floating, exactly as they should on a UC8151. `0x70` is a candidate panel identifier. **This corrects a claim committed earlier the same day** (`6338778`) that panel readback needed no rev B wiring change: that was generalised from GxEPD2's source without opening a datasheet, and the truth is per-controller. `SSD1677.pdf` Table 6-1 gives 4-wire SPI a **separate SDO pin** where 3-wire merges SDI/SDO into one bidirectional SDA; BS is strapped low for 4-wire (DESPI-C02 R4 3Ω→GND) and the 24-pin FPC carries no SDO — so the **T81, the deployment panel, most likely has no return path at all, and that is untested**. Consequence worth chasing: `GxEPD2_576_GDEH0576T81::_Init_Full` reads the controller temperature to pick a waveform LUT, gets 0, and therefore selects the coldest compensation on a warm panel — which may be a wiring limit, not a firmware oversight, so it must not be "fixed" by enabling `_readData` until a T81 is probed. **Two things deliberately left uninterpreted**: `0x40` → `d2` does not look like the ~33 °C the sensor was reporting, and the probe samples on SCK high while SSD1677 documents data shifting out on the falling edge, so a one-bit alignment offset is possible — both need the UC8151D datasheet to settle. Rev B discussion moved to `hardware/thermometer-c6/README.md`; CLAUDE.md carries rules, not open questions. |
-| — | 2026-08-05 | **PASS** | **The tightened threshold catches the mismatch the old one missed — same board, same panel, same wrong rig.** Board 2 reflashed to `3326fe7`, `thermometer_c6_debug`, rig `revA-bigscreen` (no `PLATFORMIO_BUILD_FLAGS`), with the 2.13" GDEY0213M21 still attached, i.e. the T81's SSD2677 code driving a UC8151 panel. Earlier the same configuration measured `21281ms / 4016 slices / 2 timeouts` and was reported as a **successful render** against the flat 30 s threshold. Now: `EPD dashboard: 21400ms, 4016 busy slices *** BUSY STUCK ***`, fault latched, refreshes suspended, and the operator confirmed the LED blinking. The threshold is now 2x the panel's own GxEPD2 busy timeout — 20 s here, 40 s on a Z90 whose healthy full refresh already times out at ~21 s against its own 20 s limit (`notes.md`) and which a flat 30 s would have false-latched on a cold morning. The upload gate also ran clean on this flash: `Board check: 98:88:e0:ff:fe:75 thermometer_c6 carries GDEH0576T81 — matches rig revA-bigscreen`. Note the archive header still reads `GDEH0576T81` throughout, since it is written once at format time — which is exactly why the gate kept objecting to the `revA-213m21` bench flashes and needed `ALLOW_RIG_CHANGE=1`. **What this does not cover** stays true: a wrong panel that answers *every* wait would still pass, and two panels sharing a controller and resolution are indistinguishable without an OTP identifier (`0x38` on SSD1681, `0x70` on UC8151 — see `hardware/datasheets/README.md`). |
-| — | 2026-08-09 | **PASS** | **Multi-SSID WiFi selection and the last-known-network hint, verified on rev A board 2** (`98:88:e0:75:48:10`), `thermometer_c6_debug`, rig `revA-bigscreen`, `PLATFORMIO_BUILD_SRC_FLAGS="-DDISABLE_DISPLAY -DRESYNC_INTERVAL_MIN=30"`, build `62320af-dirty` (the feature was uncommitted at flash time; it is now `57b050d`). No panel and no battery attached. Archive erased twice during the run with the operator's standing permission — board 2 carries no data worth keeping. Four behaviours confirmed in one session: first boot **scans and picks by RSSI** (`scan 2501ms, 12 APs, best '<hotspot>' at -42 dBm`, beating `<house-ap>` at −56); later resyncs **connect with no scan line at all**, the hint doing its job; killing the hinted AP gives `'<hotspot>' refused us (reason 201)` → `falling back to a scan` → `best '<house-ap>' at -56 dBm`, and subsequent resyncs go straight there, so the **hint is rewritten**. Reason 201 is `WIFI_REASON_NO_AP_FOUND`, classified terminal, so the fallback ran immediately instead of waiting out the 8 s hint timeout. **How long the miss itself took was not measured** — the grep used for that capture stripped timestamps, and `esp_wifi_connect()` must sweep for an absent SSID before it can report 201, after which tier 1 scans again. Assume a double sweep until someone times it. **The archive interaction is the part worth recording**: `RESYNC_INTERVAL_MIN` sets only the clamp floor, while the live `resync_interval_s` is restored from the base snapshot's drift block and clamped into `[MIN, MAX]`, so a stored 86400 survives a `-DRESYNC_INTERVAL_MIN=30` build intact and **no resync fires at all on the bench**. This cost two capture cycles before `erase_flash` made it obvious; it is the same hazard `.claude/rules/history-store.md` records for an injected zero interval, pointing the other way. Also seen and correct: adding one `RTC_DATA_ATTR` byte shifted `historical_data`, tripping the `self_addr` check (`RTC history version mismatch — resetting history`) rather than the `RTC_STATE_VERSION` check, then recovering **99 hourly (+1 replayed), 3 sparkline** from flash — the documented forward path in `.claude/rules/rtc-state.md`, exercised for real. |
-| — | 2026-08-09 | **PASS** | **WiFi timing spike, same board, throwaway `-DWIFI_SPIKE` harness at `e557dd2-dirty`, since deleted.** Not an archive test; logged because it flashed the device four times and the numbers now drive `wifi_connect()`. Scan duration is a pure function of dwell and independent of what answers: **2501 ms at the IDF default 120 ms/channel (n=8, zero variance)**, 1801 at 60, 1601 at 40 — a back-to-back rescan cost the same, so the ~1.2 s fixed part belongs to the scan, not to driver start-up. Association is **~300 ms (295–335, n=15)** whether the channel and BSSID are pinned or not, which is why the hint stores neither. DHCP is 2.2–4.6 s, ~90 % of a connect; dropping the ARP conflict check took it to 2841 ms (`62320af`). Scans are **noisy in presence, not in duration** — consecutive identical scans returned between 5 and 14 APs — so `wifi_connect()` never reads one empty scan as proof a network is gone. Durations only: **no PPK2 pass was taken**, so nothing here is a charge figure. Full write-up in [notes.md](notes.md). |
-| — | 2026-08-09 | **PASS** | **Resync backoff keyed on evidence of absence, not on failure — verified on rev A board 2** (`thermometer_c6_debug`, rig `revA-bigscreen`, `PLATFORMIO_BUILD_SRC_FLAGS="-DDISABLE_DISPLAY -DRESYNC_INTERVAL_MIN=15"`, build `978f97b-dirty`, archive erased before each case). Two deployed boards fail for opposite reasons and the old code treated them alike: a basement board permanently out of range retried once a day forever, while the XIAO rigs fail *in range* on their chip antenna and must keep retrying. **Absent network** (only configured SSID powered off, hint pointing at it): `refused us (reason 201)` → `falling back to a scan` → `none of ours` → `WiFi failed (2 in a row, network absent), retrying in 60 s`, then 120 s, then flat at 120 s — the shift cap holding at 8x the 15 s floor. **Present but unusable** (network visible, deliberately wrong password): `refused us (reason 202) — check the password in local-secrets.h`, classified `network present but unusable`, and the retry stayed **flat at 15 s across seven consecutive failures with no escalation**. That second row is the point of the design: it is the regression the change exists to avoid, and testing it required a control, since a backoff that escalates on *any* failure would have passed the first test and quietly broken the XIAOs. Classification needs both signals to agree — the driver's own sweep finding the SSID on no channel, and a full scan seeing none of ours — because scan presence is noisy here (5–14 APs across consecutive identical scans), and one empty scan alone would misclassify a flaky board as an absent AP and defer it a week. No RTC state added, so no `RTC_STATE_VERSION` bump and the ESP32-E headroom is unchanged at 32 bytes. **Still unmeasured**: how long the tier-0 miss itself costs, which is what decides whether the second scan is worth skipping. Incidental: a phone hotspot used as the bench AP self-disabled after a few minutes with no client attached, which created the absent condition without being asked. |
-| — | 2026-08-11 | **PASS** | **First time the deployment panel has ever been driven on a rev A board, and the GxEPD2 fork is retired on the strength of it. Rev A board 2 + GDEH0576T81, `thermometer_c6_debug`, rig `revA-bigscreen`, `PLATFORMIO_BUILD_SRC_FLAGS="-DREFRESH_EVERY_N_WAKES=1 -DDISPLAY_TEMP_DELTA=99"` throughout** — the pairing documented at `src/Thermometer.cpp:109-115`, which decouples the repaint cadence from the room so the sample count is exact rather than delta-triggered. Four flashes: `1620598` on the fork submodule (`1509966`); `1620598-dirty` on stock upstream (`de82887`); the same plus a one-line bench control pinning `_get_lut_temperature()` to 232; and the same plus `DISPLAY_ROTATION 2`, now committed as `dfbbb6d`. Upload gate ran clean on every one (`carries GDEH0576T81 — matches rig revA-bigscreen`). **The measurement, 21-25 renders per config:** fork at LUT `0xE8` = **445.62 busy slices** (sd 0.50); upstream with the LUT *pinned* to `0xE8` = **442.67** (sd 0.48); upstream at its own `0xF1` default = **228.25** (sd 0.44). Wall time 3098 / 3034 / 1960 ms — those means include the first post-reset render, which runs ~500 ms long; steady state is ~3075 ms on the fork and ~1935 ms on upstream. **The pinned-LUT row is the whole point and it was load-bearing, not ceremony**: without it the 445→228 drop reads as "upstream is twice as fast", when in fact the two implementations agree to **0.66% of slices** and the entire gain is LUT selection. Both drivers read panel temperature via CMD `0x40` + `_readData()`, which only works under software SPI and returns 0 here; the fork then falls through `temp <= 5` to the **coldest** waveform, while upstream guards the failed read (`if (temp == 0) return 241`) and lands on the 20..30 °C value. One line, ~48% of panel busy time on every full refresh, paid on every refresh since the T81 was first driven. **Consequence for the logbooks: every T81 refresh figure recorded to date — including the readme's ~45 mC XIAO+T81 row — was taken on the fork, i.e. the coldest LUT, and does not carry over.** Rotation moves with the swap: upstream drives PSR `0x2F` where the fork used `0x27` plus a software `_reverseByte`, landing the frame 180° out; operator confirmed `DISPLAY_ROTATION 2` corrects it, and it is measured free (rot 0 and rot 2 agree within noise at equal LUT, 445.62 vs 442.67). All six compiled panel drivers build against upstream (Z90, M09, M21, I6FD, GDEY0154D67, T81). **Two incidental hardware findings.** The panel worked on the **factory bridge config JP2 0.47Ω + JP5 10µH with nothing changed** — a third controller family now proven on the universal config, which is the evidence the rev B deletion of L2/R15/R16 is waiting on. And the T81's FPC has its contacts on the **back** face where every other panel tested here has them on the front, so J4's dual-contact `FPC-05FB-24PH20` is now hardware-proven rather than a paper requirement — the bottom-contact-only `FPC-05F-24PH20` really would have failed, and it must stay off any cost-down list. **Self-heat datapoint, not an equilibrium measurement:** BMP581 read **32.57 °C against ~26 °C ambient** (operator's reference) while USB-powered with a charging pack — a ~6.5 °C offset, enough to cross the 30 °C LUT band boundary, which is a live constraint on feeding the sensor to `setTemperature()` later. Board 2's prior state was `978f97b-dirty` rendering normally, i.e. **not** the `-DDISABLE_DISPLAY` build logged above on 2026-08-09 — an unlogged flash, which is exactly why the panel footer was read before anything was touched. |
-| — | 2026-08-11 | **STATE** | **Baseline build loaded on rev A board 2 ahead of the first deployment-configuration power capture: `thermometer_c6_release`, rig `revA-bigscreen`, build `2f22620`, clean tree, and deliberately NO build flags.** Archive left in place, upload gate clean, panel therefore carries no `! DEBUG` badge — this is production-identical, which is the point. Two flag sets were loaded and then withdrawn before any capture, and why is worth keeping. **`-DPPK2_DEBUG` withdrawn** because no digital leads are connected this session: with nothing to read the markers, `ppk2_selftest()` is pure overhead at ~40 ms per wake (2×10 ms CPU + 5×4 ms display, ungated — it runs every boot), and `history_store_persist_now()` adds a 3×50 ms D1 preamble on flush wakes. Against a ~7.7 mC non-refresh wake that is a several-percent inflation of the exact figures being recorded. The sleep/wake/refresh current contrast here is large enough (≈18 µA / mA-scale / ~100 mA+) that `ppk2.py`'s current-derived region fallback separates them without markers; the cost is that it warns rather than verifying its own fingerprint, and that the **~0.04 mC journal append cannot be separated from the refresh without D1** — that one needs a later marker session. **`-DREFRESH_EVERY_N_WAKES=10 -DDISPLAY_TEMP_DELTA=99` withdrawn** because the floor and the refresh charge want opposite conditions. Forcing a repaint every ten wakes makes refreshes countable, but caps the longest quiet window at ~10 min, and board 1's settled 18.3 µA needed a **2397 s** one — so the flags would have made the dominant term (the floor is ~78% of the budget) structurally incomparable with the figure being compared against. They were carried over from the same day's render-timing A/B, where forcing the cadence was correct because the goal was 20+ renders in three minutes. Checked while withdrawing them: `DISPLAY_TEMP_DELTA` gates only the refresh decision (`src/Thermometer.cpp:2102`), not history storage, so it was never an archive confound. If natural refreshes prove too sparse for a charge figure, take that as a **separate short capture** with a forced cadence rather than bundling both into one run. |
-| — | 2026-08-11 | **STATE** | **Sweep build on rev A board 2 for the T81 battery-floor re-run: `thermometer_c6_debug`, rig `revA-bigscreen`, `PLATFORMIO_BUILD_SRC_FLAGS="-DBATTERY_SHUTDOWN_DISABLED -DDISABLE_WIFI"`.** Flashed by the operator; the upload output was not captured here, so the hash is **bounded rather than observed** — `tools/ppk2.py` stamped the host tree at `ccfde51` into the sweep plan when the run started at 19:26Z, and the flash immediately preceded it. Treat as `ccfde51` unless the panel footer says otherwise. Both flags are required by the procedure: the shutdown latch would otherwise cut the board off partway down the voltage list and the radio would add an uncontrolled term to every step. **11 of 13 linear steps completed before the run died on a tool bug** (`np.bool_` in `alive`, see the `docs/notes.md` entry) — HEALTHY 4200→3400 mV, DEGRADED at 3300 and 3200. All raw captures survived and were recovered offline with the repaired `sweep --replay`; `summary.json` and `report.md` in `local/sweeps/ppk2-sweep-20260811-192621/` are regenerated and carry `status: replayed (no bisect — needs hardware)`. **The bisect between 3400 and 3300 mV never ran, so the cliff is a bracket, not a measurement** — board 1's comparable figure is 3317-3320 mV. Board 2's archive is bench scratch and was left in place; the archive is not implicated either way, as the sweep power-cycles rather than erasing. Board still carries this build: it is **not** deployment-safe (no low-battery shutdown) and must be reflashed before the soak. |
-| — | 2026-08-11 | **PASS** | **Waveform-LUT characterisation on rev A board 2 + GDEH0576T81: all five reachable codes timed, and a firmware bug caught that would never have surfaced in the field.** `thermometer_c6_debug`, rig `revA-bigscreen`, `PLATFORMIO_BUILD_SRC_FLAGS="-DFORCE_LUT_TEMPERATURE=<C> -DREFRESH_EVERY_N_WAKES=1 -DDISPLAY_TEMP_DELTA=99"` throughout, on battery **and** USB. Hashes across the session: `3c91183-dirty`, `1fec0e5`, `1fec0e5-dirty`, ending at `7bbe97e` with submodule `bf88c5c`. `FORCE_LUT_TEMPERATURE` bypasses the VBUS gate on purpose (indoors no band boundary is reachable naturally) and raises `! LUT`. **Results, 7-20 renders each, zero faults:** 232 = 443 slices/3012 ms; 235 = **447**/3030; 238 = 238/1989; 241 = 228/1935; 244 = 225/1925. Two regimes with a ~1.95x cliff at the ≤10 °C boundary, flat either side — not a gradient, and 0 °C costs no more than 8 °C. **Two firmware bugs found, both by measuring rather than by reading.** (1) The first build read **228 slices at a forced −5 °C**, i.e. no effect at all: `PANEL_HAS_LUT_TEMPERATURE` was tested in `Display.h`, which `Display.cpp` includes before `app_common.h` supplies `USE_*`, so both entry points compiled to empty stubs and the build was clean. It would never have shown up in service — the driver's 241 fallback is correct at room temperature, so the feature would have been missing only in the cold, the one condition it exists for. Fixed by including `device-config.h` from `Display.h` plus an `#error` in `Display.cpp` evaluated after all includes (`c2d3ad6`); the binary grew 342 B, which is the code being compiled rather than optimised away. (2) With the value reaching the panel, **every render after the first failed**, `DISPLAY_FAULT_BUSY_IDLE` latching with refreshes suspended. Not power: reproduced identically with a battery fitted and USB in (2504 ms/228 then 797 ms/0) versus J1 open (2497/795). The `setTemperature()` patch returned early and skipped `_writeCommand(0x40); delay(5); _readData()` — **5 ms and a command removed from the middle of `_InitDisplay()`**, between `0xE9` (PST) and the `0xE0`/`0xE6`/`0xA5` LUT activation. Controls: calls compiled out = 20 renders/0 faults; first patch at either LUT = 1 render then a latched fault; corrected patch = 19-20 renders/0 faults at 443 slices. Fixed by issuing the read unconditionally and substituting only the value (`7bbe97e`), which also shrank the driver diff to three lines against stock with identical traffic on the wire. **The LED fault blink earned its place here**: a panel that stops refreshing shows a stale frame, which on a thermometer is indistinguishable from a working one, and `BUSY_IDLE` vs `BUSY_STUCK` is what separated "never woke" from "hung" and killed the timeout theory early. **Board 2 currently carries the 8 °C arm and is not deployment-safe** — reflash clean before any soak. |
-| — | 2026-08-11 | **STATE** | **Board 2 left on the forced cold-LUT arm for the VGH/VGL DMM probe (Phase 3 bridge question).** `thermometer_c6_debug`, rig `revA-bigscreen`, `PLATFORMIO_BUILD_SRC_FLAGS="-DFORCE_LUT_TEMPERATURE=8 -DREFRESH_EVERY_N_WAKES=1 -DDISPLAY_TEMP_DELTA=99"`, git `1531d1d`, clean tree. Panel reads `! DEBUG 5s/REFRESH/LUT`. 8 °C selects LUT 235, chosen because it gives the longest drive phase this panel can produce — **~3.03 s of sustained driving per refresh against ~1.93 s at 241** — which is ~30 samples per drive at the multimeter's 10 Hz ceiling, and is also the condition where a marginal charge pump would show first. Refresh cadence is every wake, so ~8 s apart. Probe pads per `hardware/thermometer-c6/README.md:52-59`: VGH = C2, VGL = C1 (both 4.7 µF/25 V to GND), and PREVGH = C5 / PREVGL = C11 for the boost outputs ahead of the panel's internal regulation, where an underspecified RESE/inductor pair shows up before VGH does. **Not deployment-safe** — forced cadence and a pinned waveform; reflash clean before any soak. |
-| — | 2026-08-12 | **PASS** | **Boards 3 and 4 brought up: both render, and the rev A fleet now agrees on panel timing to ±1 busy slice.** `thermometer_c6_debug`, rig `revA-bigscreen` (the env default, no `RIG=` needed), no build flags; board 4 flashed at `eb5f535-dirty`, board 3 at `5ce9f19-dirty`. Neither board had ever been powered. **Phase 0's DMM rail pass was skipped deliberately** — see the BRINGUP entry; board 2 set that precedent and all four boards share a reflow and an X-ray. **Board 4 first, on purpose:** its U5 (BMP581 LGA-10) was flagged slightly rotated at the 2026-07-29 visual pass and the X-ray frame↔board mapping is unknowable, so `BRINGUP.md:57-66` deferred the verdict to the on-device detect. It reads `BMP581 detected (chip ID 0x50)` and a plausible temperature — **the skew is benign, settled on the board rather than by inference.** Neither board logs a 32k-XTAL fallback warning, so both FC-135 crystals are running, which is what the drift arm depends on. MACs read and recorded in the rig header: board 3 `98:88:e0:75:47:94`, board 4 `10:bd:a3:a8:d3:64` — **board 3 differs from board 1 (`…47:9c`) in the last byte only**, a trap worth knowing before assuming which board is on the bus. **Render timing across the fleet, same panel model, same driver:** board 2 228 slices, board 3 230 then 229, board 4 230 — **229 ± 1**, with the first render after a reset running ~500 ms long on every board (2378-2434 ms vs 1808-1870 ms steady), the same offset seen on board 2 during the LUT work. Board 3 also logged `LP core temp: 31.28 °C`, so its LP core survives sleep and reads the sensor. Both wrote `base seq 1`, i.e. a complete boot→render→sleep cycle, not merely a render. Two bench notes. **A panel-less board is not a fault**: both boards first booted with no FPC fitted, stalled in the BUSY wait (`Display dashboard` with no `EPD dashboard:` completion) and latch a display fault, which needs a restart to clear once the panel goes on — fit the panel with power off, then power up. And **the PPK2 occupies two `/dev/ttyACM*` nodes** while sourcing, so upload and serial must be addressed by `/dev/serial/by-id/` path, never by ACM index; two back-to-back uploads to the same by-id path also race each other for the port and fail with no useful message. Sensor readings this session are **not ambient**: 30.65 °C (board 4) and 33.79 °C then 31.26 °C (board 3) are USB-powered with a charging path, the same ~+6.5 °C self-heat class measured on board 2, and the 3 °C board-to-board spread is bench history, not a sensor discrepancy. Both boards carry a debug build and a debug-era archive; **erase and reflash release before the soak.** |
-| — | 2026-08-12 | **STATE** | **Soak build loaded on boards 3 and 4: `thermometer_c6_release`, rig `revA-bigscreen`, git `753afbc` on a clean tree, NO build flags, `esptool erase_flash` first on both.** Release carries `-DDISABLE_SERIAL` (`platformio.ini` `[release]`), so `power_efficient` is satisfied and the panel shows no `! DEBUG` — production-identical, which is the point of the arm. **One hash across all arms is deliberate**: both boards' MACs were committed together before either flash, so the two boards run byte-identical firmware and the logbook records one build rather than two that differ by a comment. Board 2 is to receive the same `753afbc` once the BOD sweep releases the rig; until then it carries the SEL_3 `bod_probe` build and is **not** deployment-safe (no low-battery shutdown, no radio, raised brownout trip). The erase matters for t=0: both boards held a debug-era archive from the evening's bring-up, and an empty one makes the first base snapshot unambiguous. **What is verified and what is not.** Verified: erase ran, upload returned SUCCESS with esptool's written-hash check, the build came from a clean tree, and the operator confirmed the expected footer with no `!` badges on both boards. **Not verified: that either board completes a full boot→render→sleep cycle** — the proof of that is a base snapshot, and it cannot be read here, since release has no serial and dumping the archive over USB enters download mode and wipes RTC. The no-cable substitute is the panel's own boot counter advancing past `#1` after ten minutes; a frame still reading `#1` is a boot loop, and that is the failure this logbook exists to catch on day zero rather than day ten. Board 3's soak starts the evening of 2026-08-12; board 4 when convenient. |
-| — | 2026-08-11 | **PASS** | **The BOD probe's top level is unusable with the T81, and that is itself the finding: at 4.23 V in — the best case there is — a T81 refresh already pulls 3V3 below the ~3.27 V trip.** `thermometer_c6_bod_probe` (extends `thermometer_c6` + `debug`, rig `revA-bigscreen`), `PLATFORMIO_BUILD_SRC_FLAGS="-DBATTERY_SHUTDOWN_DISABLED -DDISABLE_WIFI"`, git `2541adc` with only `hardware/thermometer-c6/thermometer-c6.kicad_pro` dirty from a KiCad touch, so the panel reads `2541adc-dirty`. Both flags are the pair the procedure requires: the shutdown latch would cut the board off partway down the voltage list, the radio would add an uncontrolled per-step term. **At `CONFIG_ESP_BROWNOUT_DET_LVL_SEL_2` (~3.27 V, the chip's top level and what board 1 used) the board boot-loops on USB at ~0.8 s: 30 boots and 30 `E BOD: Brownout detector was triggered` in a 25 s capture, `Battery level: 4220-4236 mV` every time.** The discriminator that makes this a droop measurement rather than a high-trip-point artifact is **where** it dies: all 30 land either on `Display dashboard (920x680)` (8) or the line immediately before it (22), and **never** during boot, LP core, BMP581 read, ADC or sleep. A trip point sitting above its own rail would fire everywhere; this one fires only under the panel's load. **At `SEL_3` (~3.10 V) the same build runs clean — 1 boot, 0 brownouts, two full renders at 2434/1870 ms and 228 busy slices each** (LUT 241, no forced temperature in this build). **So the rail minimum during a T81 refresh at 4.23 V input is bracketed between the SEL_3 and SEL_2 trip estimates, ~3.10-3.27 V** — the levels are IDF estimates with per-chip variation, and SEL_2/SEL_3 are adjacent, so no tighter bracket is available from this instrument. **Against board 1**, which needed VIN ≤ ~3.57 V (stochastic 3.56-3.59) to cross the same SEL_2 trip with the 200×200 panel, board 2 crosses it at 4.23 V — 660 mV of input headroom eaten by the bigger panel. Note this is at a VBAT where an LDO has ample headroom, so the mechanism looks like **load-step transient response, not dropout** — which is consistent with the 2026-07-30 board 1 captures where the two boot transients were identical either side of the edge and what changed was a flat ~10 mA churn at `bootloops=0`. **The ~300 mV "droop" figure and the 3550/3500 mV thresholds derived from it should not be carried onto the T81 without redoing the derivation.** The sweep continues at SEL_3, where droop = topmost failing step − 3.10 V. Two operational notes. **The stale-sdkconfig trap cost a cycle**: `sdkconfig.thermometer_c6_bod_probe` is generated on first build and then wins over `sdkconfig.defaults.bod_probe`, so the SEL_3 edit was silently ignored, the reflash reported SUCCESS and the board kept SEL_2 — caught by reading `ESP_BROWNOUT_DET_LVL` back out of `.pio/build/<env>/config/sdkconfig.json`, fixed by deleting the generated file, now a rule in `.claude/rules/build.md`. And **the loop is visibly rough on the panel**: the operator reported gradients, inverted full-screen passes and erratic timings, which is the T81 being reset mid-waveform ~30 times and re-initialising from scratch; recovery was a flash of the known-good `thermometer_c6_debug` LUT-8 arm. ROM download mode ignores the raised level, so USB reflash always recovers a boot-looping board. **Not deployment-safe** — no low-battery shutdown, no radio, raised BOD; reflash clean before any soak. |
-| — | 2026-08-12 | **PASS** | **Board 2 joins the soak, and unlike boards 3 and 4 its complete boot→render→sleep cycle is *proved* rather than inferred: `thermometer_c6_release`, rig `revA-bigscreen`, git `11cd8dd` on a clean tree, NO build flags, `esptool erase_flash` (1.2 s) first.** **The hash differs from boards 3/4's `753afbc` but the firmware does not** — board 2 was flashed after the BOD probe released the PPK2 rig, by which time three documentation-only commits had landed, and `git diff 753afbc..11cd8dd -- src include ulp components platformio.ini sdkconfig.defaults*` is empty. The only difference on the wire is the string the panel prints; read the three arms as one build. **Three pre-flash checks, all read back rather than assumed.** (1) `ESP_BROWNOUT_DET_LVL: 7` out of `.pio/build/thermometer_c6_release/config/sdkconfig.json` — the shipped ~2.51 V default, confirming the release env did **not** inherit the probe's SEL_3 through a stale generated `sdkconfig`. That is the `.claude/rules/build.md` trap applied prophylactically for the first time, and it matters most here: a soak board silently carrying a raised brownout level would bootloop somewhere down the discharge curve and be read as a dead battery ten days later. (2) The baked `GIT_HASH` recovered from `firmware.bin` reads `11cd8dd` with no `-dirty`. (3) Clean tree, no `PLATFORMIO_BUILD_SRC_FLAGS` in the environment (`env -u` on the build and upload), `LP_CORE_IDLE` commented at `ulp/lp_core_main.c:21`. **The cycle proof.** Boards 3 and 4's rows record that a base snapshot could not be read without wiping RTC, leaving the panel's boot counter as the only substitute. Board 2 was still on USB with the soak not yet started, so the wipe cost nothing and the archive was dumped directly: `base seq 1 written 2026-08-11 22:46:18Z cursor 0x000000`, `formatted by 11cd8dd`, `last snapshot written by 11cd8dd`, 0 hourly / 1 sparkline / 0 drift, identity `GDEH0576T81/BMP58x`. **That timestamp is real wall-clock** (22:46:18Z ≈ 00:46 CEST, ~90 s after the upload) against a store header that reads `created (before first NTP sync)` — so NTP synced between format and the first snapshot, which verifies the credentials and the static lease are live and is the precondition for the drift arm collecting anything at all. Operator confirmed the panel showing `11cd8dd`. **Soak t=0 = 2026-08-11 22:49Z**, when USB came out and the 400 mAh pack went in; the panel then confirmed a ULP-woken refresh at **3998 mV on the second render (4004 mV on the first — surface charge decaying, not discharge)**, which is a complete boot→sleep→ULP-wake→render cycle *on battery*, i.e. the sleep path and the LP core both verified after the supply handover rather than only under USB. **Boards 2 and 4 are ~10 cm apart** and board 3 goes elsewhere (still flashed-but-not-started as of this row, and so the last board reachable on USB); that pairing is deliberate and is written up as the experimental design in `docs/clock-drift.md` — the co-located pair controls part-to-part spread so the third board's gap can be read as the room, and it incidentally runs two calibrated BMP581s in the same air for ten days, which nothing here has done before. **The erase wiped the sweep-era archive on purpose**: board 2 is bench scratch with standing permission, and its store held hundreds of boots taken at brownout-edge voltages during the BOD probe, which would have polluted every hourly and drift record of the soak. Note the archive dump reset the chip through download mode, so the board restarted from `#1`; the USB→battery handover power-cycles it again regardless. **Deferred, not forgotten**: the FPC-in/out floor pair (the unexplained 4% floor gap, 19.05 µA board 2 vs 18.3 µA board 1) needed ~2 h of settled windows on the PPK2 harness that was already rigged, and the operator chose the soak over it — it waits for the next PPK2 session, and with three boards now sitting for ten days the gap stays open at least that long. |
-| — | 2026-08-12 | **STATE** | **Board 3 joins the soak and the rev A fleet is sealed — no board is on USB any more.** `thermometer_c6_release`, rig `revA-bigscreen`, git `52cf257` on a clean tree, NO build flags, `esptool erase_flash` first (operator-run; the erase and upload output was not captured here). Panel at t=0: **4188mV, `52cf257`, Aug 12 2026 18:27**. **Same hash as boards 2/4 but NOT the same binary**, and git cannot show it: `include/local-secrets.h` is gitignored and carries a different `MY_WIFI_NETWORKS` list, because board 3 deploys to a different AP in a different room. The tracked firmware paths are byte-identical to `753afbc` (board 4) — `git diff 753afbc..52cf257 -- src include ulp components platformio.ini sdkconfig.defaults*` is empty — so the divergence is confined to which SSID it associates with, and to a **dynamic DHCP lease** where boards 2/4 hold static ones. Deliberately unmeasured before sealing: the DHCP term is a property of that AP and its RF path, a bench capture would describe the wrong network, and `HistoryDriftSample` persists no connect duration, so an in-situ capture would have meant an on-flash layout change to a fleet already sharing one. `resync_fail_count` plus absolute `boot_count`/`refresh_count` are journaled per arm and carry the term that actually costs charge. **Two things are unconfirmed and only a harvest can settle them**: whether 4188mV came off the second render (the pair's t=0 discipline — board 3 sits ~190mV above both, unexplained, see `docs/clock-drift.md`), and whether the panel timestamp is an NTP-synced clock or an unsynced one, i.e. whether the drift window has a real t=0 at all. A first resync at the new AP is what proves it; `! NOSYNC` at the bench was expected there, since the destination AP is absent at the bench and backoff escalation keys on absence, resetting on the first success. |
-| — | 2026-08-12 | **PASS** | **Board 3's soak start confirmed on the panel — both open items from the row above are closed.** Same build as that row (`thermometer_c6_release`, rig `revA-bigscreen`, git `52cf257`, no flags, different gitignored network list). **The clock was NTP-synced at first boot**, so `Aug 12 2026 18:27` is a real time and the drift window has a genuine anchor; the new AP was reachable from where it booted, and the first drift sample lands one resync interval after the anchor rather than at t=0. **The ~190mV gap against boards 2/4 is not surface charge**: the fourth render read **4186mV**, a 2mV step off the 4188mV t=0, where board 2's own first-to-second step was 6mV — board 3 is flatter than the pair's decay, not steeper, so the pack really is sitting at ~4.19V. Remaining candidates are an incompletely-topped pack on 2/4 or per-board divider spread, and with the fleet sealed neither can be separated on the bench; battery comparisons across arms stay rate-based. No `! NOSYNC`, no other badges, operator reports no issues. |
-| — | 2026-08-12 | **note** | **The ~190mV t=0 gap between board 3 and boards 2/4 is fully explained, and it retires the divider-spread question.** Boards 2 and 4 run their packs **as ordered, never charged**; only board 3's went on the charger. Every pack read **~4000mV on its own board when plugged in before charging** — same nominal state, same reading, across different boards — which bounds per-board VBAT divider spread at the resolution of that observation (tens of mV) and rules it out as an explanation for 190mV. Not a characterisation, and the only cross-board divider check available now that the fleet is sealed. Operational consequence: thresholds are `low_battery_mv = 3550` / `no_battery_mv = 3500` on this board, so board 3 has 688mV of span against the pair's ~497mV, and an as-shipped cell near 4.00V is roughly three-quarters charged (estimated from the LiPo curve, **not measured here**). **Boards 2 and 4 should reach cutoff appreciably before board 3**, which bounds the control pair's drift run and not just its battery figure — a board at cutoff stops journaling drift samples. Harvest planning should assume the pair ends first. |
-| — | 2026-08-23 | backup | **rev A board 2 harvested off the soak at day 11.6 and retired.** `history.py backup --full` against `/dev/serial/by-id/…98:88:E0:75:48:10`, image `local/archives/hist-revA-board2-20260823.bin` (1966080 B, restorable). Read back: identity `GDEH0576T81/BMP58x`, `formatted by 11cd8dd`, `store created (before first NTP sync)`, `last snapshot written by 11cd8dd`, **base seq 14 written 2026-08-23 00:38:03Z**, cursor 0x001100, **279 hourly / 320 sparkline / 3 drift**, span 2026-08-11 22:00Z .. 2026-08-23 12:00Z. `arm` = 0 on every record, correct for a field build. **Nothing was flashed** — the board is retired to the bench, archive kept. The panel was photographed before the cable went in, because pack voltage is journaled nowhere and USB runs the charger: `#498 r347 lp16737 11d14h w:ULP mx4.0V 11cd8dd Aug12'26 s4d`, 3964mV, 23.0°C, no badges. Results in `docs/clock-drift.md`. Two operational notes. **The auto-generated backup filename does not disambiguate the rev A fleet** — it carries the EUI-64 middle bytes (`fffe75`), identical across boards 1/2/3 — so every image here is named explicitly and identity is taken from the dump header instead. And the pack was left plugged in for the few minutes the board was docked, taking ≲5mAh of charge (~1% of 400mAh): boards 2 and 4 are no longer literally never-charged cells, though the description holds for the soak it describes. |
-| — | 2026-08-23 | backup | **rev A board 4 harvested and retired, same session.** `--full` against `/dev/serial/by-id/…10:BD:A3:A8:D3:64`, image `local/archives/hist-revA-board4-20260823.bin`. Identity `GDEH0576T81/BMP58x`, `formatted by 753afbc`, **`store created 2026-08-11 22:24:26Z` — a real wall clock**, where board 2's header reads `created (before first NTP sync)`; both boards were flashed within half an hour of each other and the difference is only whether NTP had landed before `store_format()`. Base seq 13 written 2026-08-22 23:05:57Z, cursor 0x0010f0, **279 hourly / 320 sparkline / 3 drift**, span identical to board 2's, `arm` = 0. Pre-cable panel: `#504 r341 lp16747 11d15h w:ULP mx4.0V 753afbc Aug12'26 s4d`, 3962mV, 22.9°C, no badges. **The pair's headline: −19.7ppm (board 2) against −6.6ppm (board 4), a 3.3σ part-to-part gap, and 279 hourly rows agreeing to a mean of +0.003°C** — the first crystal rates and the first in-situ two-sensor comparison this project has produced. Written up in `docs/clock-drift.md`. |
-| — | 2026-08-23 | backup | **rev A board 1 harvested at day 23.0 and retired — the longest FC-135 run.** `--full` against `/dev/serial/by-id/…98:88:E0:75:47:9C` (board 1, not board 3's `…47:94`), image `local/archives/hist-revA-board1-20260823.bin`. Identity `GDEM0154I61/BMP58x`, `formatted by 711c3a4`, `store created 2026-07-31 12:48:12Z`, base seq 26 written 2026-08-23 14:01:23Z, cursor 0x002320, **554 hourly / 320 sparkline / 4 drift**, span 2026-07-31 12:00Z .. 2026-08-23 13:00Z, `arm` = 0. **The header carries no `last snapshot written by` line** — that field postdates `711c3a4`, so its base snapshots never had it; the elastic-forwards `HistoryDriftState` behaving as documented, not a fault. Pre-cable panel: `#1392 r1094 lp33113 22d23h w:ULP mx4.2`, 4086mV, 22.8°C. **Getting it on the bus took two attempts and is worth recording**: the by-id node was present when enumerated but had vanished by the time esptool connected a few seconds later — the board had gone back to sleep, which on a C6 removes the USB device entirely. A poll-and-fire loop was armed, and the operator short-circuited it with a manual BOOT+RST park. **Board 1 is therefore parked in ROM download mode**, which is the documented enumerated-and-quiet state: it needs an RST press to run the app again, and since it is retired that press is optional. Results, including the three-board comparison this record completes, in `docs/clock-drift.md`. |
-| — | 2026-08-23 | backup | **Phase-2 arm 5 harvested at day 18.1 — 32 drift records, the largest sample this project has taken.** `--full` against `/dev/serial/by-id/…58:E6:C5:13:9B:E4` (the `xiao-bigscreen` rig), image `local/archives/hist-arm5-xiao-t81-20260823.bin`. Identity `GDEH0576T81/BMP58x`, `formatted by f5e1749`, `store created (before first NTP sync)`, `last snapshot written by f5e1749`, base seq 35 written 2026-08-23 07:50:35Z, cursor 0x001ec0, **435 hourly / 320 sparkline / 32 drift**, span 2026-08-05 11:00Z .. 2026-08-23 13:00Z, **`arm` = 5 on every record** — the per-record tag doing exactly the job it was added for. **No reflash**: arm 5 is the unchanged control and continues. Panel before the park: `! EXP 5 60s`, `#1763 r1596 lp26499 18d2h w:ULP mx4.3V f5e1749 Aug5'26 s6h`, 23.5°C. **Getting in needed the manual BOOT+RST park, and the plug-in wake is a trap worth naming**: the by-id node appeared on the plug-in wake and had vanished before esptool could connect ~2s later, exactly as on board 1 — a XIAO has no USB service window, so that ~1s window is all a plugged-in sleeping board offers. A poll-and-fire loop plus the operator's park closed it. **The board is parked in ROM download mode and needs an RST press to resume the arm** — unlike the retired rev A boards, this one must go back to running. Analysis in `docs/clock-drift.md`. |
-| — | 2026-08-23 | backup | **Phase-2 arm 1 harvested at day 18.1 — 45 drift records spanning a reflash.** `--full` against `/dev/ttyUSB0`, image `local/archives/hist-arm1-firebeetle-20260823.bin`. Identity `firebeetle2_esp32e c4:5b:be:8c:4d:b8 (GDEH0154Z90/BMP390L)`, `formatted by 44ba5ba` with `last snapshot written by 1ea3cd7`, base seq 54 written 2026-08-23 09:31:07Z, cursor 0x003080, **691 hourly / 320 sparkline / 45 drift**, span 2026-07-25 19:00Z .. 2026-08-23 13:00Z. **The records split 10 at `arm`=0 and 35 at `arm`=1, and the phase-1 subset re-decodes to +5066.3 ppm / ±4.5% — the 2026-08-05 harvest published +5066 ppm (+4839…+5247, ±4.5%) off a different image.** A published result round-tripped through a no-erase reflash and an 18-day gap, which is the strongest durability evidence this log holds. The first `arm`=1 record carries `d_boot = −658`, the boot counter running backwards across the RTC wipe — the documented straddled record, and dropping it moves the mean 1.4 ppm. **`--baud 921600` FAILS on this CH340**: `Corrupt data, expected 0x1000 bytes but received 0xff0 bytes` partway through a `--full` read. `--baud 460800` completed the same read first time. That is `history.py`'s default baud, whose help string calls it "decisive on the FireBeetle's UART bridge" — it is, but in the other direction; use 460800 on this rig. |
-| — | 2026-08-23 | flash | **FireBeetle crossed over to phase-2 arm 2: `dfrobot_firebeetle2_esp32e_release`, rig `firebeetle`, git `668ff6d` on a clean tree, `PLATFORMIO_BUILD_SRC_FLAGS="-DULP_ALWAYS_WAKE -DDISPLAY_TEMP_DELTA=999.0f -DREFRESH_EVERY_N_WAKES=5 -DRESYNC_INTERVAL_MIN=43200 -DEXPERIMENT_ARM=2"` (966624 B).** Repaint every 5th wake (288/day) against arm 1's every 60th, wake cadence unchanged — the manipulated variable is refresh count alone. **Three pre-flash checks read back rather than assumed:** the build printed `ULP size check: UlpProgramBMP390L.cpp = 110/128 words`, which is the documented `ULP_ALWAYS_WAKE` signature (127/128 without it), so the flag reached the FSM program *before* the board was touched; the baked `GIT_HASH` recovered from `firmware.bin` reads `668ff6d` with no `-dirty`; and the tree was clean with nothing committed between build and upload. **`build_src_flags` rather than the global `build_flags` the 2026-08-05 arm rows used** — every macro here is read under `src/`, and `scripts/check_ulp_size.py` preprocesses with `build_src_flags` applied, which is what makes the word count a live check. No `erase_flash`: the archive carries both arms apart by the per-record tag. Panel confirmed **`! EXP 2 60s/RESYNC/REFRESH`** with `668ff6d`, and `! DRIFT +221s/12h +5085ppm n6 ±0%` — the drift ring restored from flash across the RTC wipe, since the badge shows the pre-flash sample. **Open on leaving the bench: `! NOWIFI` and `! NOSYNC x1`.** The rig sat next to the laptop for the flash and could not associate; as arm 1 it was syncing cleanly with no `! NOSYNC`. This build is HEAD, so it carries `2fccb5f` — absent-network failures escalate the retry — which makes bench time expensive: each failed attempt pushes the next one further out. Returned to its deployment position; badges to be confirmed clear. |
-| — | 2026-08-23 | flash | **Correction to the arm-2 flash row above: the first upload carried the wrong `MY_WIFI_NETWORKS` list, and the row that recorded it did not mention `local-secrets.h` at all.** The working copy still held the other location's network list from board 3's 2026-08-12 flash, so arm 2 booted unable to associate — `! NOWIFI` and `! NOSYNC x1` on the panel, which is the degradation-is-visible rule catching a build error rather than a hardware one. **Reflashed after the operator corrected the file**: same env, same rig, same `PLATFORMIO_BUILD_SRC_FLAGS`, clean tree, git **`ef27bd0`** (966720 B). Panel confirmed `! EXP 2 60s/RESYNC/REFRESH` with `ef27bd0`, **no `! NOWIFI`, no `! NOSYNC`**. Three things worth carrying. (1) **The binary size is the discriminator that git cannot give**: 966624 B against 966720 B, a 96-byte delta that is purely the network-list strings — `local-secrets.h` is gitignored, so the tracked tree was identical and clean for both uploads. (2) **The two builds happen to be separable by hash anyway, but only by accident**: HEAD moved 668ff6d → ef27bd0 between them because the arm-1 write-up was committed in between, which is exactly the hazard the skill warns about — read the hash at the moment of each upload, never from the last one noted. Had nothing been committed, this would have been board 3's trap verbatim: same hash, different binary. (3) **This is a build-time failure mode the arm gates do not cover.** `! EXP 2 60s` passed, the ULP word count passed, the baked hash matched, and the arm would still have produced zero drift samples for its entire second half. **A flash that changes `local-secrets.h` needs `! NOWIFI`/`! NOSYNC` checked on the first frame, and this log's rows should name which secrets were compiled in.** |
-| — | 2026-08-23 | backup | **Phase-2 arm 3 harvested at day 18.1 — 20 drift records spanning the arm-3 flash.** `--full` against `/dev/serial/by-id/…58:E6:C5:16:1F:08` (the `xiao-hat` rig), image `local/archives/hist-arm3-xiao-hat-20260823.bin`. **`formatted by 8712f72 (!! unknown to this repo)`** — the orphaned pre-squash commit `docs/clock-drift.md` already documents, now printed with the flag that fossil motivated, alongside `last snapshot written by 2fa3750`. Base seq 41 written 2026-08-23 08:38:10Z, cursor 0x002bd0, **667 hourly / 320 sparkline / 20 drift**, span 2026-07-26 19:00Z .. 2026-08-23 13:00Z, records splitting **3 at `arm`=0 and 17 at `arm`=3**. The pre-experiment three re-decode to **+304.5 ppm against a published +305** — the second published figure to round-trip out of a re-read archive this session. The first `arm`=3 record is the documented straddled one and here the documented *mechanism* is the one that fired: no `erase_flash` at the arm-3 flash, so `drift_state_load()` restored the pre-flash 3.47 d interval and the first window ran **3.49 d against a 12 h setting**, carrying `d_boot = −893`. **12 of 28 resync attempts failed**, readable straight out of window lengths that run 24/36/37/49 h — against the `resync_fail_count == 0` recorded at the day-4 gate check, on a 296x128 panel too small to show the sync-age token. |
-| — | 2026-08-23 | **BUG FOUND** | **Arm 4 flashed unpinned, and every gate this project has passed it.** `seeed_xiao_esp32c6_epaper_release`, rig `xiao-hat`, git `49245c9`, `PLATFORMIO_BUILD_SRC_FLAGS="-DDISPLAY_TEMP_DELTA=999.0f -DREFRESH_EVERY_N_WAKES=60 -DRESYNC_INTERVAL_MIN=43200 -DEXPERIMENT_ARM=4"` (1013808 B). The wake pin is `TEMP_DELTA_THRESHOLD_C 0.0f`, which cannot be a `-D` (the LP sub-build inherits no flags), so it was edited into `ulp/lp_core_bmp58x.h` and committed so the panel hash would be reconstructible. **The header edit never reached the LP binary**: `ulp_main.bin` md5 `bde10fbd3b03`, byte-identical to a build at the unmodified `0.1f`. The board therefore ran arm 4's pinned *refresh* cadence with a room-driven *wake* cadence — the manipulated variable of the other half of the experiment. **The panel showed `! EXP 4 60s/RESYNC/REFRESH` with the right hash, the upload verified, and nothing was wrong except the thing being tested.** Root cause and the ruled-out fixes are in `.claude/rules/ulp.md`; upstream it is [platform-espressif32 #517](https://github.com/platformio/platform-espressif32/issues/517), open since 2021. **The lasting lesson: no existing gate inspects the LP binary, so an LP-affecting change needs `rm -rf .pio/build_cache` and an `ulp_main.bin` md5 compared against a known-vanilla build.** |
-| — | 2026-08-23 | **PASS** | **Arm 4 reflashed, pinned and verified this time: `seeed_xiao_esp32c6_epaper_release`, rig `xiao-hat`, git `cfcc35f`, same `PLATFORMIO_BUILD_SRC_FLAGS`** (1013808 B). Built after `rm -rf .pio/build/<env> .pio/build_cache`, with the pin moved into `ulp/lp_core_main.c` — the only file whose content the LP object is keyed on. **Verified before the board was touched: `ulp_main.bin` md5 `14d6e676a309`, distinct from the vanilla `bde10fbd3b03`**, and the baked `GIT_HASH` reads `cfcc35f` clean. Operator confirmed the panel showing `! EXP 4 60s/RESYNC/REFRESH` with `cfcc35f`. Getting in took two manual BOOT+RST parks: **esptool's closing `Hard resetting via RTS pin` released the first park**, contrary to the 2026-07-30 row's finding that a manual park survives one, and the board booted, rendered and slept before the upload could connect. **The pin was reverted from master afterwards (`250a53f`), so rebuilding arm 4 from HEAD would produce an unpinned binary** — the sensor programs have since been inlined into `lp_core_main.c` (`ce1e516`), so a re-pin goes there, not into a header that no longer exists. |
-| — | 2026-09-16 | backup | **Phase-2 arm 2 harvested at day 23.7, no flash.** `history.py backup --full` on `/dev/ttyUSB0` → `local/archives/hist-arm2-firebeetle-20260916.bin`. Identity `firebeetle2_esp32e c4:5b:be:8c:4d:b8 (GDEH0154Z90/BMP390L)`, `formatted by 44ba5ba`, `last snapshot written by ef27bd0`, base seq 101, 1261 hourly / 320 sparkline / 92 drift (10 arm 0, 35 arm 1, 47 arm 2). Panel before the cable: `! EXP 2 60s/RESYNC/REFRESH`, `! DRIFT +210s/12h +4799ppm n6 +-1%`, 3688mV, `#34541 r6918 lp0 23d17h`. The arm 0 and arm 1 subsets still decode to +5066.3 / +5124.6 ppm (`tools/driftstats.py`). Board RST by esptool, left running on arm 2. |
-| — | 2026-09-16 | backup | **Phase-2 arm 4 harvested at day 23.7, no flash.** `history.py backup --full` over USB-Serial-JTAG (`…58:E6:C5:16:1F:08`, auto-detected) → `local/archives/hist-arm4-xiao-hat-20260916.bin`. Identity `xiao_esp32c6 58:e6:c5:ff:fe:16 (GDEW029I6FD/BMP58x)`, `formatted by 8712f72 (!! unknown)`, `last snapshot written by cfcc35f`, base seq 88, 1237 hourly / 320 sparkline / 63 drift (3 arm 0, 17 arm 3, 43 arm 4). Panel before the park: `! EXP 4 60s/RESYNC/REFRESH`, `#34442 r593 lp34441 23d16h`. Arm 3 subset still decodes to +607.2 ppm. Manual BOOT+RST park before the read. |
-| — | 2026-09-16 | backup | **Phase-2 arm 5 harvested at day 42.1 (day 23.7 since the August RST), no flash.** `history.py backup --full` over USB-Serial-JTAG (`…58:E6:C5:13:9B:E4`, auto-detected) → `local/archives/hist-arm5-xiao-t81-20260916.bin`. Identity `xiao_esp32c6 58:e6:c5:ff:fe:13 (GDEH0576T81/BMP58x)`, `formatted by f5e1749`, `last snapshot written by f5e1749`, base seq 81, 1005 hourly / 320 sparkline / 78 drift (all arm 5; the 32 August records re-decode to +877.9 ppm). Panel before the park: `! EXP 5 60s`, `#2187 r1936 lp34688 23d18h … s4h`. Manual BOOT+RST park before the read. |
-| — | 2026-09-16 | flash | **XIAO T81 (`xiao-bigscreen`, `58:e6:c5:ff:fe:13`) returned to production: `seeed_xiao_esp32c6_release`, git `2994f30`, clean tree, NO build flags, archive kept (1060960 B).** Ends phase-2 arm 5 after 42 days; the day-24 harvest row above holds its last read. No compensation on this rig (C6). The first drift record after this flash straddles the arm's 12 h interval and is to be discarded. Expected panel: fresh frame, `2994f30`, no `! EXP` badge. |
-| — | 2026-09-16 | flash | **XIAO hat (`xiao-hat`, `58:e6:c5:ff:fe:16`) returned to production: `seeed_xiao_esp32c6_epaper_release`, git `bbc7bd7` (docs-only apart from the T81's `2994f30`), clean tree, NO build flags, archive kept (1013936 B).** Ends phase-2 arm 4 after 24 days. The LP wake pin of arm 4 never lived on master, so this LP binary is the vanilla one. First drift record after the flash is to be discarded. Expected panel: fresh frame, `bbc7bd7`, no `! EXP` badge. |
-| — | 2026-09-16 | flash | **FireBeetle (`firebeetle`, `c4:5b:be:8c:4d:b8`) to the first compensated release: `dfrobot_firebeetle2_esp32e_release`, git `68af393`, clean tree, NO build flags, archive kept, `/dev/ttyUSB0`.** Flashed twice in a row: `fe3f7cb` first, then `68af393` minutes later, which adds the refit-on-restore so the ring the archive restores arms the correction at the first boot instead of after the first resync. Ends phase-2 arm 2 after 24 days. First drift record after this is to be discarded. Expected panel: `68af393`, footer `c+48xx` right after `lp0`, no `! EXP`. |
-| — | 2026-09-16 | **PASS** | **Compensation armed at first boot on the FireBeetle, `68af393`.** Panel: footer `c+4820`, status `! DRIFT +210s/12h +4799ppm n6 +-1%` (the restored arm-2 record; clears at the first resync). The level is the recency-weighted fit of the six restored arm-2 rates. Board unplugged to the field on battery. |
+| Date | Board / rig | Env | Flags | Hash | Erase | Note |
+|---|---|---|---|---|---|---|
+| 2026-07-25 | FireBeetle | `dfrobot_firebeetle2_esp32e_debug` | none | `b10cd29` (from `95c7b04-dirty`) | no | relocation to the new table; first format |
+| 2026-07-25 | FireBeetle | same | none | `f050bfc` | no | anchor / outage-fill test (`1f6552d`), injected 30-day archive |
+| 2026-07-25 | FireBeetle | same | none | `HS_FORMAT` 2→3 test build (`19dde9f`) | no | archive left intact and disabled, byte-identical |
+| 2026-07-25 16:55Z | FireBeetle | same | none | `99390e1` | yes | clean state for the drift collection; see also `44ba5ba` below |
+| 2026-07-25 | FireBeetle | same | none | `44ba5ba` | | the build the 2026-08-05 harvest found running "from the 2026-07-25 clean flash"; the flash itself has no row |
+| 2026-07-26 | `xiao-hat`, PPK2 4.2 V at shield JST | `seeed_xiao_esp32c6_epaper_release` | `-DPPK2_DEBUG` | `4c0bbef` | no | first archive on this board; relocation from `factory` 0x10000 (`1ed89a3`, 19d23h basement run) to 0x1f0000; written `--before no_reset --after no_reset` |
+| 2026-07-26 | `xiao-hat` | same | `-DPPK2_DEBUG` | `4c0bbef` | yes (1.7 s) | re-armed the first-boot capture after the board booted on USB by mistake |
+| 2026-07-26 | `xiao-hat` | same | `-DPPK2_DEBUG` | `f07d2c9` | no | archive from the previous boot kept |
+| 2026-07-26 | `xiao-hat` | same | none | `91f08eb` | no | production build to test whether the sleep-floor hump exists without `PPK2_DEBUG` |
+| 2026-07-26 | `xiao-hat` | same | `-DPPK2_DEBUG` | `e8fb31e` (1000402 B; 1000114 B without the flag) | no | 80 ms marker fingerprint every wake; analyse with `--decimate 1` |
+| 2026-07-26 | `xiao-hat` | same | none | `2d90340` (1000114 B) | yes (1.5 s) | clean state after a spurious 127.5 °C reached flash |
+| 2026-07-26 | `xiao-hat` | same | none | `-dirty` (early plausibility gate) | no | sensor-fault test |
+| 2026-07-26 | `xiao-hat` | `seeed_xiao_esp32c6_epaper_debug` | none | (session builds) | no | fault rendering and recovery tests |
+| 2026-07-26 | `xiao-hat` | `seeed_xiao_esp32c6_epaper_release` | none | `431b7b0` (1008016 B) | no | production build with the sensor-identity work; archive found empty, one base snapshot from 17:55:34Z before the first sync |
+| 2026-07-29 | rev A board 1, USB, no panel | `thermometer_c6_debug` | none | `3b42d3a` | factory blank | `USE_BMP58x` + `DISABLE_DISPLAY`, LEDs on; first power |
+| 2026-07-29 | board 1 + GDEM0154I61 | same | none | `91bd4d8` | no | `USE_154_GDEY`; first render |
+| 2026-07-29 | board 1 | `thermometer_c6_release` | none | `cbda104` | no | production build for the first sleep-floor and FC-135 drift datapoints |
+| 2026-07-30 | board 1, battery in | `thermometer_c6_debug` | none ×3, `-DUSB_WINDOW_OBSERVE_CYCLES=2` ×1 | `73d4f8a` | no | USB service window tests, `EPD_POWER_GATE` on |
+| 2026-07-30 | board 1 | same | none | `aec755b`, then `ac2647e` | no | VBUS wake and LP-IO reclaim fixes |
+| 2026-07-30 | board 1, PPK2 at J1 | same | `-DBATTERY_SHUTDOWN_DISABLED -DDISABLE_WIFI` | `1d567b6` | no | battery-floor sweep build, ~20 power cycles; nothing reaches the archive (no clock) |
+| 2026-07-30 | board 1 | `thermometer_c6_bod_probe` | `-DBATTERY_SHUTDOWN_DISABLED -DDISABLE_WIFI` | `6e2fa64` | no | brownout raised 2.51 V (level 7) → ~3.27 V (level 2); flashed through the USB window |
+| 2026-07-31 | board 1 | `thermometer_c6_release` | none | `1e1048e` (1027424 B) | no | thresholds 3550 warn / 3500 mV shutdown; brownout, latch and WiFi back to stock; window flash 15.6 s |
+| 2026-07-31 | board 1, 400 mAh pack | same | none | `711c3a4` (1027344 B) | yes (1.4 s) | soak start, t=0 ~12:50Z; `DISABLE_LEDS` added (−80 B); pre-erase archive backed up (46 hourly / 19 sparkline / 0 drift, 2026-07-29 14:00Z .. 2026-07-31 11:00Z, base seq 2) |
+| 2026-08-05 | `xiao-hat` | `seeed_xiao_esp32c6_epaper_release` | `-DRESYNC_INTERVAL_MIN=43200 -DEXPERIMENT_ARM=3` | `2fa3750` (1008304 B) | no | phase-2 arm 3, vanilla first: resync pinned to 12 h gives ~2 drift samples/day instead of one per 2-3.5 d; archive (231 / 320 / 3) survived byte-for-byte |
+| 2026-08-05 | FireBeetle | `dfrobot_firebeetle2_esp32e_release` | `-DULP_ALWAYS_WAKE -DDISPLAY_TEMP_DELTA=999.0f -DREFRESH_EVERY_N_WAKES=60 -DRESYNC_INTERVAL_MIN=43200 -DEXPERIMENT_ARM=1` | `1ea3cd7` (961536 B) | no | phase-2 arm 1: 1440 wakes/day, repaint every 60th, only the refresh count changes at day 14; `USE_154_Z90` + `USE_BMP390L` + `EPD_POWER_GATE` + `DISABLE_LEDS` |
+| 2026-08-05 | `xiao-bigscreen` | `seeed_xiao_esp32c6_release` | `-DRESYNC_INTERVAL_MIN=43200 -DEXPERIMENT_ARM=5` | `f5e1749` (1056368 B) | no | phase-2 arm 5; partition-table migration from `44e56b6` (2026-07-06) |
+| 2026-08-05 | board 2, no panel | `thermometer_c6_debug` | none | `6338778`, then `0c29c6e` | no | EPD fault path (no panel) |
+| 2026-08-05 | board 2 + GDEY0213M21 | same, `RIG=revA-213m21` | none | `fe4c3d5` | no | right-panel control; `ALLOW_RIG_CHANGE=1` |
+| 2026-08-05 | board 2 + GDEY0213M21 | same, `RIG=revA-213m21` | `-DEPD_PROBE` | `434436c-dirty` (probe now `27a74f8`) | no | SPI readback probe |
+| 2026-08-05 | board 2 + GDEY0213M21 | same, rig `revA-bigscreen` | none | `3326fe7` | no | wrong-panel detection with the tightened threshold |
+| 2026-08-09 | board 2, no panel | `thermometer_c6_debug` | `-DDISABLE_DISPLAY -DRESYNC_INTERVAL_MIN=30` | `62320af-dirty` (feature now `57b050d`) | yes ×2 | multi-SSID selection |
+| 2026-08-09 | board 2 | same | `-DWIFI_SPIKE` | `e557dd2-dirty` ×4 | | throwaway timing harness, since deleted |
+| 2026-08-09 | board 2 | same | `-DDISABLE_DISPLAY -DRESYNC_INTERVAL_MIN=15` | `978f97b-dirty` | yes, before each case | resync backoff |
+| 2026-08-11 | board 2 + GDEH0576T81 | `thermometer_c6_debug` | `-DREFRESH_EVERY_N_WAKES=1 -DDISPLAY_TEMP_DELTA=99` | `1620598` (fork `1509966`), `1620598-dirty` (upstream `de82887`), + LUT pin, `dfbbb6d` | no | render-timing A/B, fork retired |
+| 2026-08-11 | board 2 | `thermometer_c6_release` | none | `2f22620` | no | baseline for the deployment power captures (`notes.md`) |
+| 2026-08-11 | board 2 | `thermometer_c6_debug` | `-DBATTERY_SHUTDOWN_DISABLED -DDISABLE_WIFI` | `ccfde51` (bounded, not observed) | no | T81 battery-floor sweep; upload output not captured |
+| 2026-08-11 | board 2 | same | `-DFORCE_LUT_TEMPERATURE=<C> -DREFRESH_EVERY_N_WAKES=1 -DDISPLAY_TEMP_DELTA=99` | `3c91183-dirty`, `1fec0e5`, `1fec0e5-dirty`, `7bbe97e` (submodule `bf88c5c`) | no | LUT characterisation |
+| 2026-08-11 | board 2 | same | `-DFORCE_LUT_TEMPERATURE=8 -DREFRESH_EVERY_N_WAKES=1 -DDISPLAY_TEMP_DELTA=99` | `1531d1d` | no | left on the cold-LUT arm for the VGH/VGL DMM probe; not deployment-safe |
+| 2026-08-11 | board 2 | `thermometer_c6_bod_probe` | `-DBATTERY_SHUTDOWN_DISABLED -DDISABLE_WIFI` | `2541adc-dirty` (`.kicad_pro` only) | no | BOD probe at SEL_2, then SEL_3 |
+| 2026-08-12 | board 4, then board 3 | `thermometer_c6_debug` | none | `eb5f535-dirty`, `5ce9f19-dirty` | no | first power |
+| 2026-08-12 | boards 3 and 4 | `thermometer_c6_release` | none | `753afbc` | yes, both | soak build |
+| 2026-08-11 22:4xZ | board 2 | `thermometer_c6_release` | none | `11cd8dd` | yes (1.2 s) | soak build; firmware identical to `753afbc` (`git diff -- src include ulp components platformio.ini sdkconfig.defaults*` empty) |
+| 2026-08-12 | board 3 | `thermometer_c6_release` | none | `52cf257` | yes | soak build; same tracked tree as `753afbc`, different gitignored `MY_WIFI_NETWORKS`, dynamic DHCP lease |
+| 2026-08-23 | FireBeetle | `dfrobot_firebeetle2_esp32e_release` | `-DULP_ALWAYS_WAKE -DDISPLAY_TEMP_DELTA=999.0f -DREFRESH_EVERY_N_WAKES=5 -DRESYNC_INTERVAL_MIN=43200 -DEXPERIMENT_ARM=2` | `668ff6d` (966624 B) | no | arm 2: repaint every 5th wake (288/day) against arm 1's 60th; wrong `MY_WIFI_NETWORKS` compiled in |
+| 2026-08-23 | FireBeetle | same | same | `ef27bd0` (966720 B) | no | arm 2 corrected; 96 B delta is the network strings |
+| 2026-08-23 | `xiao-hat` | `seeed_xiao_esp32c6_epaper_release` | `-DDISPLAY_TEMP_DELTA=999.0f -DREFRESH_EVERY_N_WAKES=60 -DRESYNC_INTERVAL_MIN=43200 -DEXPERIMENT_ARM=4` | `49245c9` (1013808 B) | no | arm 4, LP wake pin never reached the LP binary |
+| 2026-08-23 | `xiao-hat` | same | same | `cfcc35f` (1013808 B) | no | arm 4 pinned and verified; pin reverted on master in `250a53f` |
+| 2026-09-16 | `xiao-bigscreen` | `seeed_xiao_esp32c6_release` | none | `2994f30` (1060960 B) | no | back to production after 42 days of arm 5 |
+| 2026-09-16 | `xiao-hat` | `seeed_xiao_esp32c6_epaper_release` | none | `bbc7bd7` (1013936 B) | no | back to production after 24 days of arm 4; vanilla LP binary |
+| 2026-09-16 | FireBeetle | `dfrobot_firebeetle2_esp32e_release` | none | `fe3f7cb`, then `68af393` | no | first compensated release; `68af393` adds refit-on-restore |
+
+Boards 1, 2 and 4 are retired to the bench (2026-08-23); board 3 soaks at
+another location. Board 2 is bench scratch: erase it freely.
+
+## Harvests
+
+`history.py backup --full`, no flash unless the device-state table says so.
+Every backup enters download mode, resets the chip and wipes RTC (boot counter,
+in-progress hour, drift window); the archive is untouched.
+
+| Date | Rig | Image | Hourly / sparkline / drift | Span | Base | Header | Panel before the cable |
+|---|---|---|---|---|---|---|---|
+| 2026-08-05 | `firebeetle` (`44ba5ba`) | `local/archives/hist-firebeetle2_esp32e-8c4db8-2026-08-05.bin` | 254 / 320 / 10 | 2026-07-25 19:00Z .. 2026-08-05 08:00Z (10d13h unbroken) | seq 18, 2026-08-04 21:12:15Z | | `+5063ppm` photographed 2026-08-02, `+5037ppm` 2026-08-05 |
+| 2026-08-05 | `xiao-hat` (`431b7b0`) | `local/archives/hist-xiao_esp32c6-fffe16-2026-08-05.bin` | 231 / 320 / 3 | 2026-07-26 19:00Z .. 2026-08-05 09:00Z | seq 12, 2026-08-04 13:40:35Z | `built 8712f72`, orphaned | hash confirmed on panel |
+| 2026-08-23 | rev A board 2, day 11.6 | `local/archives/hist-revA-board2-20260823.bin` (1966080 B) | 279 / 320 / 3 | 2026-08-11 22:00Z .. 2026-08-23 12:00Z | seq 14, 2026-08-23 00:38:03Z, cursor 0x001100 | `formatted by 11cd8dd`, created before first sync, `last snapshot 11cd8dd` | `#498 r347 lp16737 11d14h w:ULP mx4.0V 11cd8dd Aug12'26 s4d`, 3964 mV, 23.0 °C |
+| 2026-08-23 | rev A board 4, day 11.6 | `local/archives/hist-revA-board4-20260823.bin` | 279 / 320 / 3 | same as board 2 | seq 13, 2026-08-22 23:05:57Z, cursor 0x0010f0 | `formatted by 753afbc`, `store created 2026-08-11 22:24:26Z` | `#504 r341 lp16747 11d15h w:ULP mx4.0V 753afbc Aug12'26 s4d`, 3962 mV, 22.9 °C |
+| 2026-08-23 | rev A board 1, day 23.0 | `local/archives/hist-revA-board1-20260823.bin` | 554 / 320 / 4 | 2026-07-31 12:00Z .. 2026-08-23 13:00Z | seq 26, 2026-08-23 14:01:23Z, cursor 0x002320 | `formatted by 711c3a4`, `store created 2026-07-31 12:48:12Z`, no `last snapshot` field | `#1392 r1094 lp33113 22d23h w:ULP mx4.2`, 4086 mV, 22.8 °C |
+| 2026-08-23 | `xiao-bigscreen`, arm 5 day 18.1 | `local/archives/hist-arm5-xiao-t81-20260823.bin` | 435 / 320 / 32 | 2026-08-05 11:00Z .. 2026-08-23 13:00Z | seq 35, 2026-08-23 07:50:35Z, cursor 0x001ec0 | `formatted by f5e1749`, `last snapshot f5e1749` | `! EXP 5 60s`, `#1763 r1596 lp26499 18d2h w:ULP mx4.3V f5e1749 Aug5'26 s6h`, 23.5 °C |
+| 2026-08-23 | `firebeetle`, arm 1 day 18.1 | `local/archives/hist-arm1-firebeetle-20260823.bin` | 691 / 320 / 45 | 2026-07-25 19:00Z .. 2026-08-23 13:00Z | seq 54, 2026-08-23 09:31:07Z, cursor 0x003080 | `formatted by 44ba5ba`, `last snapshot 1ea3cd7` | |
+| 2026-08-23 | `xiao-hat`, arm 3 day 18.1 | `local/archives/hist-arm3-xiao-hat-20260823.bin` | 667 / 320 / 20 | 2026-07-26 19:00Z .. 2026-08-23 13:00Z | seq 41, 2026-08-23 08:38:10Z, cursor 0x002bd0 | `formatted by 8712f72 (!! unknown to this repo)`, `last snapshot 2fa3750` | |
+| 2026-09-16 | `firebeetle`, arm 2 day 23.7 | `local/archives/hist-arm2-firebeetle-20260916.bin` | 1261 / 320 / 92 | | seq 101 | `formatted by 44ba5ba`, `last snapshot ef27bd0` | `! EXP 2 60s/RESYNC/REFRESH`, `! DRIFT +210s/12h +4799ppm n6 +-1%`, 3688 mV, `#34541 r6918 lp0 23d17h` |
+| 2026-09-16 | `xiao-hat`, arm 4 day 23.7 | `local/archives/hist-arm4-xiao-hat-20260916.bin` | 1237 / 320 / 63 | | seq 88 | `formatted by 8712f72 (!! unknown)`, `last snapshot cfcc35f` | `! EXP 4 60s/RESYNC/REFRESH`, `#34442 r593 lp34441 23d16h` |
+| 2026-09-16 | `xiao-bigscreen`, arm 5 day 42.1 (23.7 since the August RST) | `local/archives/hist-arm5-xiao-t81-20260916.bin` | 1005 / 320 / 78 | | seq 81 | `formatted by f5e1749`, `last snapshot f5e1749` | `! EXP 5 60s`, `#2187 r1936 lp34688 23d18h … s4h` |
+
+Per-arm record counts: arm 1 image 10 at `arm`=0 + 35 at `arm`=1; arm 3 image
+3 at 0 + 17 at 3; 2026-09-16 FireBeetle 10 / 35 / 47 (arms 0 / 1 / 2); hat 3 /
+17 / 43 (arms 0 / 3 / 4); T81 78 all arm 5. Rev A soak images are `arm` = 0
+throughout. Pair headline from the 2026-08-23 harvest: −19.7 ppm (board 2) against
+−6.6 ppm (board 4), a 3.3σ part-to-part gap, with the 279 overlapping hourly rows
+agreeing to +0.003 °C mean. Drift analysis: [`docs/clock-drift.md`](clock-drift.md).
+
+## Results
+
+One line per experiment. Rows with a section name have detail below.
+
+| Date | Result | Finding | Detail |
+|---|---|---|---|
+| 2026-07-25 | PASS | Relocation to the new table: `factory` 0x10000/3968K confirmed by `read_flash 0x8000`, app now at 0x1f0000, first boot formatted and wrote `base snapshot seq 1 (0 hourly, 1 sparkline, cursor 0x000010)` | |
+| 2026-07-25 | PASS | `history.py backup` at 921600 over the CH340 read the right identity; incremental read 24576 bytes, not 1920 KB | |
+| 2026-07-25 | PASS | Sparkline accumulates 1 → 3 → 6 → 8 over ~7 min (one record per refresh on \|Δtemp\| ≥ 0.1 °C, ambient ~28.5 °C with the sensor 15 cm off-board); hourly path confirmed at 15:00Z: `1 hourly` for 14:00Z at 29.0/29.2/29.1 °C, min/max/avg distinct | |
+| 2026-07-25 | PASS | Reflash keeps history: `RTC history version mismatch — resetting history` then `History restored: 0 hourly, 8 sparkline (base seq 1, +0/7 replayed)`, captured from byte zero via `--after no_reset` + manual reset | |
+| 2026-07-25 | PASS | Restore after RTC loss (DTR/RTS reset reads `rst:0x1 (POWERON_RESET)`, boot_count back to 1): 6 sparkline points spanning two flashes | |
+| 2026-07-25 | PASS | Format 2 (hourly-only journaling) re-formats on first boot; `History restored: 0 hourly (+0 replayed), 9 sparkline, base seq 13` | |
+| 2026-07-25 | PASS | Synthetic injection and both charts verified from flash | Injection |
+| 2026-07-25 | PASS | Restore keeps its anchor and fills the outage with `HOURLY_NO_DATA` (`1f6552d`) | Restore anchor |
+| 2026-07-25 | PASS | A format bump leaves the archive intact and disabled (`19dde9f`) | Format bump |
+| 2026-07-25 | BUG | Journal rebuild boot-looped on the task watchdog; fixed; rebuild measured 2444 ms | Journal rebuild |
+| 2026-07-25 | BUG | `drift_state_load()` trusted flash: injected `resync_interval_s = 0` would bring up WiFi every wake; clamped | Drift state load clamp |
+| 2026-07-26 | note | `xiao-hat`: probe the XIAO's BAT pads, not the hat's JST2 (0.2 ms ~14 mA inrush, then nothing); BAT-pad floor bypasses the ETA9740 (~330-500 µA); compare with 22 µA @ 4.2 V in `notes.md` | |
+| 2026-07-26 | PASS | Plausibility gate and unattended sensor recovery on the C6 | Sensor fault |
+| 2026-07-26 | BUG | LP counters do not survive `ulp_lp_core_load_binary()`; a preserved delta reference stranded a repaired sensor | Sensor fault |
+| 2026-07-26 | note | Pre-gate readings reached flash: 127.5 °C (erased, `2d90340`) and 0.0 °C (left in place, one point) | Sensor fault |
+| 2026-07-26 | CONSTRAINT | On the C6 the CPU cannot use the sensor bus once the LP core owns it | LP I2C |
+| 2026-07-26 | PASS | Fault rendering: `--.-` + `! SENSOR`, `r2` across 31 wakes, `lp30 e30 u30`, `! LP W 0x108`; two unattended fault/recovery cycles without power cycling | Sensor fault |
+| 2026-07-26 | note | `431b7b0` archive empty (0 / 0 / 0): every reflash wiped RTC, so no run spanned an hour boundary. Recording path with rejected readings still unverified at the storage layer | |
+| 2026-07-29 | PASS | rev A board 1 first power: no 32k-XTAL fallback warning, BMP581 ID 0x50 / 29.79 °C on LP I2C, 4196 mV float-held, base seq 1 (erase 4 / program 12 / verify 4 ms), deep sleep entered | |
+| 2026-07-29 | PASS | Board 1 first render: 33.9 °C (29.8 °C an hour earlier: USB self-heat plus bench sun, unquantified), `4204mV`, footer `#3 r3 lp2 0d w:ULP mx4.2V 91bd4d8`; `#3 r3` proves archive continuity across the reflash; boost chain works on 0.47 Ω / 10 µH | |
+| 2026-07-30 | PASS | USB flash-service window, VBUS wake, LP-IO pad reclaim, IDF-14951 clock gate cleared | Board 1 USB window |
+| 2026-07-31 | flash | Board 1 soak start | Board 1 soak |
+| 2026-08-05 | PASS | Drift journal is uncapped (10 records vs `DRIFT_PPM_HIST_SIZE` 6) and reproduces the panel: 5063 / 5038 ppm recomputed vs `+5063ppm` / `+5037ppm` photographed (1 ppm of integer truncation) | |
+| 2026-08-05 | PASS | Failed resyncs are recoverable from window lengths (hat window 2 = 4.017 d against a 2 d setting: one miss ~2026-07-29) | |
+| 2026-08-05 | note | Header `built` hash records the formatting build, can be orphaned (`8712f72`) | Header timestamp |
+| 2026-08-05 | PASS | Phase-2 arms flashed; `! EXP` badge and per-record `arm` tag proven | Phase-2 arm flashes |
+| 2026-08-05 | note | First drift record of every arm straddles the regime change; discard | Phase-2 arm flashes |
+| 2026-08-05 | note | Three hashes for one firmware (`2fa3750` / `1ea3cd7` / `f5e1749`); FireBeetle's `1ea3cd7` inferred from the timeline, not read off its panel | Phase-2 arm flashes |
+| 2026-08-05 | PASS | `EPD_POWER_GATE` mandatory on every DESPI-C02 rig; `DISABLE_LEDS` mandatory on the ESP32-E | Phase-2 arm flashes |
+| 2026-08-05 | PASS | Dead-panel detection on board 2: 91213 ms / 18001 slices / 9 timeouts, LED blink | EPD fault |
+| 2026-08-05 | BUG | Upload gate hook did not run (silent); rekeyed on `COMMAND_LINE_TARGETS`, refuses in 0.99 s | Upload gate |
+| 2026-08-05 | PASS | BUSY detection limits measured three ways; wrong panel caught only after the threshold change | EPD fault |
+| 2026-08-05 | PASS | UC8151 readback obtained: `0x70` → `01 0e 00 00` driven | EPD readback |
+| 2026-08-09 | PASS | Multi-SSID selection, hint rewrite, RSSI pick; `RESYNC_INTERVAL_MIN` clamp trap; RTC `self_addr` forward path exercised | WiFi |
+| 2026-08-09 | PASS | WiFi timing spike: scan 2501 ms at 120 ms/channel, association ~300 ms, DHCP 2.2-4.6 s | WiFi |
+| 2026-08-09 | PASS | Resync backoff escalates only on evidence of absence | WiFi |
+| 2026-08-11 | PASS | First T81 drive on rev A; fork and upstream agree at equal LUT; LUT selection was ~48% of busy time | T81 driver comparison |
+| 2026-08-11 | STATE | Baseline `2f22620` for the power captures; `PPK2_DEBUG` and forced-cadence flags withdrawn | Power baseline |
+| 2026-08-11 | STATE | T81 battery-floor sweep: 11 of 13 steps, cliff bracketed 3400-3300 mV | Power baseline |
+| 2026-08-11 | PASS | Five LUT codes timed, ~1.95x cliff at ≤10 °C, two firmware bugs found | T81 LUT characterisation |
+| 2026-08-11 | STATE | Board 2 left on forced 8 °C for the VGH/VGL DMM probe | T81 VGH/VGL probe setup |
+| 2026-08-11 | PASS | BOD probe at SEL_2 boot-loops under the T81 at 4.23 V in; SEL_3 clean | BOD probe |
+| 2026-08-12 | PASS | Boards 3 and 4 first power; fleet render timing 229 ± 1 slices | Boards 3 and 4 |
+| 2026-08-12 | STATE | Soak builds on boards 2, 3, 4; board 2's cycle proved, boards 3/4 inferred from the boot counter | Soak start |
+| 2026-08-12 | PASS | Board 3 NTP-synced at first boot; its ~190 mV pack gap explained by charge state, not divider spread | Soak start |
+| 2026-08-23 | PASS | Published +5066 ppm (E) and +305 ppm (hat) round-trip through no-erase reflashes | Published figures re-decoded |
+| 2026-08-23 | flash | Arm 2 crossover; first upload carried the wrong network list | Arm 2 |
+| 2026-08-23 | BUG | Arm 4's LP wake pin did not reach `ulp_main.bin`; no gate inspects the LP binary | Arm 4 LP pin |
+| 2026-09-16 | PASS | Compensation armed at first boot on the FireBeetle: footer `c+4820` | Return to production |
+
+### Injection (2026-07-25)
+
+`hstest --inject <size> <mac> <now> <file>` builds a full 1920 KB image with the
+real store code, filled from `MockData.h`, stamped with the board's MAC.
+`history.py restore` accepted it; the device came up
+`History restored: 720 hourly (+0 replayed), 62 sparkline, base seq 1` and read
+back 720 rows spanning 2026-06-25 15:00Z .. 2026-07-25 14:00Z.
+
+| Check | Injected | On the panel |
+|---|---|---|
+| 30-day chart | coldest day 2026-07-08, 19.3 °C daily avg; daily aggregates 16.8-26.1 °C | dip "around July 8", 24 °C gridline |
+| 24 h sparkline (`--inject … ramp`) | 10.0 → 30.0 °C diagonal at fixed 30 min spacing, 48 points 1800 s apart (100 → 300 ×10) | clean diagonal |
+
+Two earlier "faults" on the mock sparkline were not: the flat stretch up to 0h is
+`MockData.h`'s 6 h carry-in (21:41Z = 23:41 CEST), and >1 point/hour is correct
+because the 24 h chart records per refresh.
+
+### Restore anchor and outage fill (2026-07-25, `1f6552d`)
+
+Injected a 30-day archive whose newest hour was 2026-07-22 17:00Z
+(`hstest --inject 1966080 <mac> $(date +%s)-259200`), booted `f050bfc`, synced
+at 2026-07-25 18:55:51Z. Read back 792 hourly rows: the 720 injected ones still
+dated 2026-06-22 18:00Z .. 2026-07-22 17:00Z, then 72 contiguous
+`HOURLY_NO_DATA` rows ending at the in-progress hour. Decoding the base ring
+alone: anchor moved 2026-07-22 17:00Z → 2026-07-25 17:00Z, newest real entry
+stayed at 2026-07-22 17:00Z (24.7 / 24.9 / 24.8 °C), ring rolled 72 h. The old
+code moved the anchor with no fills, re-dating all 720 readings 3 days forward.
+
+### Format bump (2026-07-25, `19dde9f`)
+
+`HS_FORMAT` 2 → 3 with nothing else changed. Boot log:
+`HistoryStore: on-flash format 2, firmware speaks 3 — archive left intact and DISABLED. Back it up (tools/history.py backup), then erase_flash to start a new one.`
+No format, no restore, no base write on that boot or the two after. Partition
+byte-identical: sha256 `bd49a1a6…c774b2`, 1966080 bytes, `cmp` clean. The
+"before" image was read with `--after no_reset` so a cold boot could not append
+a record and confound the hash. `history.py backup --full` still decoded the
+disabled archive (792 hourly).
+
+### Journal rebuild (2026-07-25, BUG)
+
+Result: rebuild of 720 hours from 720 journal records takes **2444 ms**, then
+`sparkline backfilled with 24 hourly points`, then a normal boot, no watchdog.
+Before the fix a slot-by-slot scan made ~119k `esp_partition_read` calls per
+pass and blew the 5 s task watchdog (`task_wdt: IDLE0 (CPU 0)` → panic → reboot)
+on every cold boot without a base, i.e. every boot after `erase_flash`. On the
+bench it looked like a stale frame plus `base (none — journal only)` in the
+backup. Fix: 512-byte chunks, all-0xFF chunks skipped without CRC, yield to
+IDLE0 every 256 chunks. `tools/hstest` now bounds flash calls (fails at
+`2051 flash reads over 2048 slots`). The 2444 ms is ~3x the estimate that
+replaced a 10x-wrong one; dominated by ~320 µs per 512-byte read. A full journal
+adds CRC over ~122k slots per pass.
+
+### Drift state load clamp (2026-07-25, BUG)
+
+An injected `resync_interval_s = 0` put `next_resync_time` on `now`, so every
+wake would have brought up WiFi (1.5-4.5 C per failed attempt). Now clamped;
+drift samples with a zero window are dropped instead of inflating `nN`. Badge
+went `+0ppm n1` → `-5265ppm n1`.
+
+### Sensor fault handling on the C6 (2026-07-26, `xiao-hat`)
+
+Ground pulled with the device running. Early gate build (`-dirty`,
+`seeed_xiao_esp32c6_epaper_release`): panel `--.-` with `! SENSOR`, status
+`#5 r2 lp1 u4 0d w:ULP mx4.3V`, two refreshes across five wakes, `u4` climbing
+once per wake (a NACKing sensor: both LP I2C error paths wake the CPU, so a dead
+bus costs one wake and one LP reload per `SLEEP_INTERVAL_S`; left unbounded).
+
+Two bugs: `ulp_lp_core_load_binary()` memsets the whole
+`CONFIG_ULP_COPROC_RESERVE_MEM` region, so LP counters read `lp1` after nine
+reloads; they are now saved and written back around the load. Preserving
+`prev_temp_c` across the reload then stranded a repaired sensor: the value
+latched from the floating bus sat within `TEMP_DELTA_THRESHOLD_C` of the room, no
+delta fired, the panel stayed blank until hand-warming. `prev_temp_c` is not
+preserved.
+
+Debug build (`seeed_xiao_esp32c6_epaper_debug`): the driver refuses a part that
+does not answer with its chip ID, so the 127.5 °C an undriven bus produces
+(`temp: 127.498032` on the earlier build) is never formed. `r2` across 31 wakes
+(boot frame plus the `FAULT_REPAINT_WAKES` heartbeat), `lp30 e30 u30`, and
+`! LP W 0x108` (LP core, trigger write, `ESP_ERR_INVALID_RESPONSE`). Fault →
+recovery → fault → recovery ran twice unattended, recovery through the
+coprocessor; a rule that refused a coprocessor reading during a fault made
+recovery impossible on the C6 and was reverted.
+
+Two pre-gate readings reached flash: 127.5 °C (archive erased, `2d90340`) and a
+0.0 °C from a raw `0x000000` (left in place: one point, archive only a day old).
+Open: hourly entries and `HOURLY_NO_DATA` for a fully rejected hour are still
+unverified at the storage layer.
+
+### LP I2C pin ownership (2026-07-26, CONSTRAINT)
+
+`lp_core_i2c_master_init()` calls `rtc_gpio_init()` on GPIO6/7, setting
+`LP_AON_GPIO_MUX_SEL` and taking the pads out of the digital domain, where
+`i2c_new_master_bus()` cannot reach them. Measured: with ground reseated the LP
+core read the sensor on 28 of 30 cycles (`lp30 e2`) while every CPU read failed
+and the panel stayed `--.-`. `ulp_lp_core_stop()` touches no GPIO register. Two
+inferred hand-back paths, untested here: `rtc_gpio_deinit()` on both pins (the
+ESP32-E path; on C6 it also force-disables the shared LP IO clock gate, IDF TODO
+IDF-14951), or opening the HP bus on the LP_I2C port (`port >= SOC_HP_I2C_NUM`).
+`verify_ulp_temp()`'s direct re-read has therefore likely never worked on this
+board. Verified against ESP-IDF v6.0.1 source. The 2026-07-30 board 1 rows
+record the reclaim working intermittently.
+
+Serial cannot be captured on wakes on this rig (USB-Serial-JTAG re-enumerates;
+DTR reaches GPIO9): read the panel counters instead. Procedure in
+`/device-session`.
+
+### Board 1 USB service window (2026-07-30, `73d4f8a` → `ac2647e`)
+
+Result: hands-free reflash works and the GPIO4 VBUS wake is proven. Battery
+attached (3770 mV), panel seated, `thermometer_c6_debug`.
+
+| Check | Observed |
+|---|---|
+| Window open | `! USB` badge; port enumerated 45 s / 45 s vs ~1 s on / 4 s off while sleeping |
+| Hands-free reflash | two back-to-back at ~18 s each, board returns to the app |
+| `-DUSB_WINDOW_OBSERVE_CYCLES=2` | exactly two deep sleeps, then the window; `USB host attached, but this sleep is an observe cycle`; `Sleeping with ULP wakeup (timer safety net: 5 s)` |
+| Continuous serial | six consecutive cycles on one port, no re-enumeration |
+| VBUS wake (`aec755b` / `ac2647e`) | unplug: `! USB` cleared within one refresh (~300 ms debounce); replug: back in ~2 s; window held 25 / 25 s |
+| Replug after ≥9 min asleep on battery | 20:15:12 replug, port at 20:15:13 (~1 s); the sleep was entered after `rtc_gpio_deinit()` had run, so IDF-14951 does not break the GPIO4 wake |
+| LP-IO pad reclaim | 5 resets while the LP core owned the bus: 3 hit `Chip ID read failed — reclaiming I2C pads from the LP domain and retrying` then `BMP581 detected (chip ID 0x50)`, 2 read first time; `failed to read BMP58x chip ID` never occurred |
+
+Findings: a manual BOOT+RST park leaves the chip in ROM download mode after
+`pio upload` (`rst:0x15 (USB_UART_HPSYS),boot:0x10 (USB_BOOT)`,
+`wait usb download`) and needs a physical RST; flashing through the window does
+not. esptool `--after watchdog_reset` is unsupported on the C6. The host probe
+is marginal against Linux USB autosuspend (`power/control=auto`, 2000 ms): a
+slow boot logged `charger, not a bus` and the window opened ~50 s later at r14.
+The first frame after a reflash rendered `--.-` + `! SENSOR` on `73d4f8a` (LP-IO
+mux still routed across the reset); on `ac2647e` both post-flash frames carried
+a real temperature. Sensor 33.7 °C flat while charging, ~33.5 °C parked in the
+window: self-heat, not ambient.
+
+Open: sleep floor with the GPIO4 wake armed against the 18.7 µA baseline
+(measured later, `notes.md`).
+
+### Board 1 soak start (2026-07-31, `711c3a4`)
+
+Getting in took a manual BOOT+RST park: VBUS was already high off a dumb
+charger, so the plug-in wake at 14:38:08 CEST probed, missed SOF and classified
+`charger, not a bus` (second sighting of the autosuspend-marginal probe),
+costing the service window until the 1 h safety net. Backup → erase → upload
+chained on the by-id node; `store created 12:48:12Z` is ~5.5 min after the
+upload, i.e. the RST press. Post-flash backup: base seq 1, 0 hourly / 1
+sparkline / 0 drift, identity `GDEM0154I61/BMP58x` (the pre-erase header still
+said `GDEW029I6FD`, a fossil of the 2026-07-29 format). Panel live with `! USB`,
+no `! NOSYNC`. Soak t=0 = the verify backup's reset, ~12:50Z; USB out afterwards
+is a supply handover, not a power cycle. Pre-erase image: session scratchpad
+`board1-prereset-20260731.bin`.
+
+### Phase-2 arm flashes (2026-08-05)
+
+Result: `EXPERIMENT_ARM` reaches the panel (`! EXP 1 60s`, `! EXP 3 60s`,
+`! EXP 5 60s`) and the journal; a no-erase reflash preserved the hat's 231 / 320
+/ 3 byte-for-byte across the arm change, with old records decoding `arm=0`.
+
+Arm 3 (hat, `2fa3750`): the panel held its pre-flash frame after the upload
+because the chip was still parked from the morning's harvest; an enumeration
+watch showed UP while parked, DOWN at t+146 s (RST), UP at t+148 s, DOWN at
+t+156 s, i.e. an ~8 s boot → NTP → render → sleep. A parked C6 stays enumerated;
+a healthy one drops off the bus within seconds (now in `/device-session`).
+
+Arm 5 (`xiao-bigscreen`, `f5e1749`): partition-table migration verified by
+reading 0x8000 before (`factory` 0x10000/3968K, no `history`, coredump 0x3f0000)
+and after (`history` 0x10000/1920K, `factory` 0x1f0000/2048K), no `erase_flash`.
+The rig's previous build `44e56b6` (2026-07-06) predates the partition, so its
+five photographed drift samples in `clock-drift.md` are its only earlier record.
+Verification backup not taken: the board dropped back to sleep between
+enumerating and pyserial asserting RTS (`OSError: [Errno 71] Protocol error`);
+archive health taken from the absence of `! NOARCH`.
+
+Arm 1 (FireBeetle, `1ea3cd7`): two config facts. `EPD_POWER_GATE` is mandatory
+on every DESPI-C02 rig: the adapter draws ~534 µA quiescent, the FDN340P gate
+(GPIO13/D7 on the E, GPIO17/D7 on the plain C6, `src/Display.cpp:47-56`,
+`docs/wiring.md`) has a 10k pull-up holding the P-FET off at reset, so an
+ungated build leaves the panel dark with no diagnostic; the E's 19.4 µA floor
+needs the gate, ungated the rig is ~562 µA; only the Seeed hat `#undef`s it
+(`src/Display.cpp:21`). `DISABLE_LEDS` is mandatory on the ESP32-E: the build
+fails on a missing `Adafruit_NeoPixel.h`, never vendored at the espidf
+migration.
+
+First drift record per arm: `drift_state_load()` restores `resync_interval_s`
+and clamps it into `[RESYNC_INTERVAL_MIN, RESYNC_INTERVAL_MAX]`, so a stored
+86400 s survives a 43200 s override and
+`next_resync_time = last_sync_time + resync_interval_s`
+(`src/Thermometer.cpp:1077`) schedules the first attempt on the old cadence.
+FireBeetle arm 1's lands ~2026-08-05 21:11Z with a ~24 h window, the hat's arm 3
+~2026-08-06 01:00Z with ~3.5 d; both carry the new arm byte. Discard the first
+record per arm, including at the day-14 crossover.
+
+Three hashes for one firmware: rows were committed between flashes, so hat
+`2fa3750`, FireBeetle `1ea3cd7`, big screen `f5e1749`;
+`git diff 2fa3750 f5e1749 -- src include ulp components platformio.ini` is
+empty. The FireBeetle's row first said `2fa3750`; `1ea3cd7` is inferred from the
+commit timeline (its `last snapshot written by 1ea3cd7` at the 2026-08-23
+harvest confirmed it).
+
+### EPD fault path (2026-08-05, board 2)
+
+Result: a dashboard render into no panel takes **91213 ms across 18001 busy
+slices**, nine GxEPD2 timeouts at 10 s (91256 / 18009 on `6338778`, repeatable
+to 0.05%), ~5x a healthy render; the fault latches on boot 1 and later wakes log
+`temperature hasn't changed significantly` with no render. Before this change
+`_waitWhileBusy` returned void and printed `Busy Timeout!` only to a console
+`DISABLE_SERIAL` removes. LED pattern three short-short-short-long groups,
+pause, repeat; the blink ignores `DISABLE_LEDS`. Sensor and archive unaffected
+(`BMP581 detected (chip ID 0x50)`, 30-31 °C USB self-heat, base seq 1). Battery
+read 4202-4250 mV with no pack (charger holding VBAT).
+
+Where BUSY detection stops, GDEY0213M21 spare (`USE_213_M21`, added 2021-11-26
+in `361248f`) on the 24-pin FPC, JP2 0.47 Ω + JP5 10 µH:
+
+| Panel | Rig | Render | Verdict |
+|---|---|---|---|
+| none | `revA-bigscreen` `0c29c6e` | 91213 ms / 18001 slices / 9 timeouts | `BUSY STUCK`, caught |
+| wrong (2.13" on the T81 driver) | `revA-bigscreen` `0c29c6e` | 21281 ms / 4016 slices / 2 timeouts | no fault; garbage patterns on glass |
+| right | `revA-213m21` `fe4c3d5` | 3692-3900 ms / 725-726 slices / 0 timeouts | healthy |
+| wrong, tightened threshold | `revA-bigscreen` `3326fe7` | `21400ms, 4016 busy slices *** BUSY STUCK ***` | caught, LED blinking |
+
+BUSY liveness proves the controller clocks, not that pixels changed. The
+threshold is now 2x the panel's own GxEPD2 busy timeout (20 s here, 40 s on a
+Z90 whose healthy full refresh the source quotes as both ~15 s and ~21 s against
+its 20 s limit, `notes.md`); a flat 30 s would have false-latched a cold Z90. A
+wrong panel that answers every wait still passes, and two panels sharing a
+controller and resolution are indistinguishable without an OTP identifier
+(`0x38` on SSD1681, `0x70` on UC8151, `hardware/datasheets/README.md`). The
+panel hash `fe4c3d5` read as `fe4c3d9` off the damaged glass: treat a
+one-character discrepancy as a read error first. `ALLOW_RIG_CHANGE=1` was needed
+to flash `revA-213m21` over a `GDEH0576T81` header; the gate logged
+`carries GDEH0576T81 — matches rig revA-bigscreen` on the `3326fe7` flash.
+
+### Upload gate (2026-08-05, BUG)
+
+`scripts/upload_gate.py` refuses to flash a rig whose panel disagrees with the
+`history` header the board carries. Registered via
+`env.AddPreAction("upload", cb)` it never ran and printed nothing: the bare
+string resolves to a SCons File node nothing builds, `env.Alias("upload")`
+creates a fresh empty alias, and PlatformIO registers `upload` with
+`AddPlatformTarget` after every extra script has run. Two wrong-rig images
+(`RIG=revA-smallscreen` onto a `GDEH0576T81` archive) flashed in silence. Fixed
+by keying off `COMMAND_LINE_TARGETS`, which also moves the refusal before the
+~60 s compile: aborts in 0.99 s. All three paths verified: mismatch refused with
+the `RIG=revA-smallscreen` hint, `ALLOW_RIG_CHANGE=1` proceeds, match prints
+`carries GDEH0576T81 — matches rig revA-bigscreen`. Offline coverage
+(`python3 scripts/upload_gate.py <archive.bin>`) passed throughout. A guard
+whose failure mode is silence must be tested by making it fail.
+
+### EPD readback (2026-08-05, board 2 + GDEY0213M21, `-DEPD_PROBE`)
+
+`display_probe_readback()` sends a command, turns MOSI into an input and
+bit-bangs eight clocks twice, once against a pulldown and once against a pullup;
+a floating line follows its pull, a driven one reads the same both ways. Stable
+across three renders: `0x70` → `01 0e 00 00`, `0x71` → `13 13`, `0x40` →
+`d2 00`, all driven; foreign SSD168x commands `0x2f` / `0x1c` and a no-op split
+`00` / `ff`, floating. `0x70` is a candidate panel identifier. This corrects
+`6338778`'s claim that readback needs no rev B wiring change: `SSD1677.pdf`
+Table 6-1 gives 4-wire SPI a separate SDO pin, BS is strapped low (DESPI-C02 R4
+3 Ω → GND) and the 24-pin FPC carries no SDO, so the T81 most likely has no
+return path (untested). `GxEPD2_576_GDEH0576T81::_Init_Full` reads controller
+temperature via `0x40`, gets 0, and picks the coldest LUT; do not "fix" by
+enabling `_readData` until a T81 is probed. Open: `0x40` → `d2` does not match
+~33 °C, and the probe samples on SCK high where SSD1677 shifts on the falling
+edge (possible one-bit offset); needs the UC8151D datasheet. Rev B discussion:
+`hardware/thermometer-c6/README.md`.
+
+### WiFi (2026-08-09, board 2, no panel)
+
+Multi-SSID (`62320af-dirty`, now `57b050d`,
+`-DDISABLE_DISPLAY -DRESYNC_INTERVAL_MIN=30`): first boot
+`scan 2501ms, 12 APs, best '<hotspot>' at -42 dBm` over `<house-ap>` at −56;
+later resyncs connect with no scan line; with the hinted AP killed,
+`'<hotspot>' refused us (reason 201)` → `falling back to a scan` →
+`best '<house-ap>' at -56 dBm`, hint rewritten. Reason 201
+(`WIFI_REASON_NO_AP_FOUND`) is terminal, so no 8 s hint timeout. Miss duration
+unmeasured (timestamps stripped from the capture); assume a double sweep.
+`RESYNC_INTERVAL_MIN` sets only the clamp floor while the live interval is
+restored from the base snapshot, so a stored 86400 survived
+`-DRESYNC_INTERVAL_MIN=30` and no resync fired until `erase_flash` (cost two
+capture cycles; the mirror of `.claude/rules/history-store.md`'s injected-zero
+hazard). Adding one `RTC_DATA_ATTR` byte tripped the `self_addr` check
+(`RTC history version mismatch — resetting history`) and recovered 99 hourly (+1
+replayed), 3 sparkline from flash: the `.claude/rules/rtc-state.md` forward
+path.
+
+Timing spike (`e557dd2-dirty`, `-DWIFI_SPIKE`, four flashes; durations only, no
+PPK2): scan 2501 ms at the IDF default 120 ms/channel (n=8, zero variance), 1801
+at 60, 1601 at 40, ~1.2 s fixed; association 295-335 ms (n=15) pinned or not;
+DHCP 2.2-4.6 s, ~90% of a connect, 2841 ms after dropping the ARP conflict check
+(`62320af`); scans return 5-14 APs for identical conditions. Write-up:
+[`notes.md`](notes.md).
+
+Backoff (`978f97b-dirty`, `-DDISABLE_DISPLAY -DRESYNC_INTERVAL_MIN=15`, archive
+erased before each case): absent network (SSID powered off) →
+`refused us (reason 201)` → `falling back to a scan` → `none of ours` →
+`WiFi failed (2 in a row, network absent), retrying in 60 s`, then 120 s, flat
+at 120 s (8x the 15 s floor). Present but unusable (wrong password) →
+`refused us (reason 202) — check the password in local-secrets.h`, retry flat at
+15 s across seven failures. Both signals must agree (driver sweep and full scan)
+because scan presence is noisy. No RTC state added; ESP32-E headroom unchanged
+at 32 bytes. Open: tier-0 miss duration. A phone hotspot self-disables after
+minutes with no client.
+
+### T81 driver comparison, fork vs upstream (2026-08-11, board 2)
+
+Result: stock upstream GxEPD2 and the fork agree to 0.66% of busy slices at
+equal LUT; the fork's ~48% extra busy time was LUT selection. Flags
+`-DREFRESH_EVERY_N_WAKES=1 -DDISPLAY_TEMP_DELTA=99` (`src/Thermometer.cpp:109-115`),
+upload gate clean on all four flashes, 21-25 renders per config.
+
+| Driver | LUT | Busy slices (sd) | Wall time mean | Steady state |
+|---|---|---|---|---|
+| fork (`1509966`) | `0xE8` | 445.62 (0.50) | 3098 ms | ~3075 ms |
+| upstream (`de82887`), LUT pinned | `0xE8` | 442.67 (0.48) | 3034 ms | |
+| upstream, own default | `0xF1` | **228.25** (0.44) | 1960 ms | ~1935 ms |
+
+Means include the first post-reset render, ~500 ms long. Both drivers read panel
+temperature via `0x40` + `_readData()`, which returns 0 here; the fork falls
+through `temp <= 5` to the coldest waveform, upstream guards it
+(`if (temp == 0) return 241`, the 20..30 °C band). Every T81 refresh figure
+recorded before this date, including the readme's ~45 mC XIAO+T81 row, was taken
+on the coldest LUT. Rotation: upstream drives PSR `0x2F` where the fork used
+`0x27` plus `_reverseByte`, so `DISPLAY_ROTATION 2` (`dfbbb6d`) corrects a 180°
+frame at no cost. All six panel drivers build against upstream (Z90, M09, M21,
+I6FD, GDEY0154D67, T81).
+
+Hardware: the T81 ran on the factory JP2 0.47 Ω + JP5 10 µH (third controller
+family on the universal config; evidence for deleting L2/R15/R16 in rev B). Its
+FPC contacts are on the back face, so J4's dual-contact `FPC-05FB-24PH20` is
+required. BMP581 read 32.57 °C against ~26 °C ambient while USB-powered with a
+charging pack (~6.5 °C self-heat, crossing the 30 °C LUT band). Board 2's prior
+state was `978f97b-dirty` rendering normally, an unlogged flash.
+
+### T81 LUT characterisation (2026-08-11, board 2, `-DFORCE_LUT_TEMPERATURE`)
+
+Result: a ~1.95x cliff at the ≤10 °C boundary, flat either side; two firmware
+bugs found by measuring. `-DFORCE_LUT_TEMPERATURE=<C>` bypasses the VBUS gate and
+raises `! LUT`; battery and USB; 7-20 renders per code, zero faults; hashes
+`3c91183-dirty`, `1fec0e5`, `1fec0e5-dirty`, `7bbe97e` (submodule `bf88c5c`).
+
+| Forced code | Slices | Wall time |
+|---|---|---|
+| 232 | 443 | 3012 ms |
+| 235 | **447** | 3030 ms |
+| 238 | 238 | 1989 ms |
+| 241 | 228 | 1935 ms |
+| 244 | 225 | 1925 ms |
+
+0 °C costs no more than 8 °C.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| First build read 228 slices at a forced −5 °C, i.e. no effect | `PANEL_HAS_LUT_TEMPERATURE` tested in `Display.h` before `app_common.h` supplied `USE_*`; both entry points compiled to stubs, build clean | include `device-config.h` from `Display.h`, `#error` in `Display.cpp` after all includes (`c2d3ad6`, +342 B) |
+| With the value reaching the panel, every render after the first failed, `DISPLAY_FAULT_BUSY_IDLE` latched | the `setTemperature()` patch skipped `_writeCommand(0x40); delay(5); _readData()` in `_InitDisplay()`; reproduced on battery + USB (2504 ms / 228 then 797 ms / 0) and J1 open (2497 / 795) | issue the read unconditionally, substitute only the value (`7bbe97e`, three-line driver diff) |
+
+Controls: calls compiled out, 20 renders / 0 faults; first patch at either LUT,
+1 render then a latched fault; corrected patch, 19-20 renders / 0 faults at 443
+slices. `BUSY_IDLE` vs `BUSY_STUCK` separated "never woke" from "hung". The
+first bug would not have shown in service: the 241 fallback is right at room
+temperature, so the feature was missing only in the cold.
+
+### T81 VGH/VGL probe setup (2026-08-11, board 2, `1531d1d`)
+
+Board 2 left on a forced 8 °C (LUT 235, `! DEBUG 5s/REFRESH/LUT`): ~3.03 s of
+sustained drive per refresh against ~1.93 s at 241, i.e. ~30 samples per drive at
+the multimeter's 10 Hz ceiling, and the condition where a marginal charge pump
+shows first; refresh every wake, ~8 s apart. Pads per
+`hardware/thermometer-c6/README.md:52-59`: VGH = C2, VGL = C1 (4.7 µF / 25 V),
+PREVGH = C5, PREVGL = C11 (boost outputs ahead of the panel's regulation). Not
+deployment-safe.
+
+### Power-capture baseline and sweep (2026-08-11, board 2)
+
+Baseline `2f22620`, `thermometer_c6_release`, no flags. `-DPPK2_DEBUG` withdrawn:
+no digital leads, so `ppk2_selftest()` (~40 ms per wake, 2×10 ms CPU + 5×4 ms
+display) and the 3×50 ms D1 preamble on flush wakes would inflate a ~7.7 mC wake
+by several percent; `ppk2.py`'s current-derived regions separate ≈18 µA / mA /
+~100 mA+ without markers, at the cost that the ~0.04 mC journal append cannot be
+separated from the refresh. `-DREFRESH_EVERY_N_WAKES=10 -DDISPLAY_TEMP_DELTA=99`
+withdrawn: it caps quiet windows at ~10 min where board 1's 18.3 µA needed 2397 s,
+and the floor is ~78% of the budget. `DISPLAY_TEMP_DELTA` gates only the refresh
+decision (`src/Thermometer.cpp:2102`), not storage.
+
+Sweep `ccfde51` (bounded: `tools/ppk2.py` stamped the host tree at 19:26Z, the
+flash immediately preceded it), `-DBATTERY_SHUTDOWN_DISABLED -DDISABLE_WIFI`: 11
+of 13 linear steps before a tool bug (`np.bool_` in `alive`, `notes.md`),
+HEALTHY 4200 → 3400 mV, DEGRADED at 3300 and 3200; captures recovered with
+`sweep --replay`; `summary.json` and `report.md` in
+`local/sweeps/ppk2-sweep-20260811-192621/` carry
+`status: replayed (no bisect — needs hardware)`. The cliff is a 3400-3300 mV
+bracket; board 1's is 3317-3320 mV. The sweep power-cycles, so the archive is
+not implicated.
+
+### BOD probe under the T81 (2026-08-11, board 2, `2541adc-dirty`)
+
+Result: at 4.23 V in, a T81 refresh pulls 3V3 below the ~3.27 V SEL_2 trip.
+
+| Level | Behaviour |
+|---|---|
+| `CONFIG_ESP_BROWNOUT_DET_LVL_SEL_2` (~3.27 V) | boot loop at ~0.8 s: 30 boots, 30 `E BOD: Brownout detector was triggered` in 25 s, `Battery level: 4220-4236 mV`; 8 die on `Display dashboard (920x680)`, 22 on the line before, none in boot / LP / sensor / ADC / sleep |
+| `SEL_3` (~3.10 V) | clean: 1 boot, 0 brownouts, renders 2434 / 1870 ms at 228 slices (LUT 241) |
+
+Rail minimum during a refresh at 4.23 V is bracketed 3.10-3.27 V (IDF estimates,
+adjacent levels). Board 1 needed VIN ≤ ~3.57 V (3.56-3.59) to cross SEL_2 with
+the 200×200 panel: 660 mV of headroom eaten by the bigger panel. The mechanism
+looks like load-step transient response, not dropout: board 1's 2026-07-30
+captures showed identical boot transients either side of the edge and a flat
+~10 mA churn at `bootloops=0`. The ~300 mV droop and the
+3550 / 3500 mV thresholds must be re-derived for the T81. Stale-sdkconfig trap:
+`sdkconfig.thermometer_c6_bod_probe` won over `sdkconfig.defaults.bod_probe`, so
+the SEL_3 edit was ignored until the generated file was deleted (rule in
+`.claude/rules/build.md`); check `ESP_BROWNOUT_DET_LVL` in
+`.pio/build/<env>/config/sdkconfig.json`. ROM download mode ignores the raised
+level, so USB reflash recovers a boot-looping board; recovery here was the
+`thermometer_c6_debug` LUT-8 arm.
+
+### Boards 3 and 4 first power (2026-08-12)
+
+Result: both render; fleet render timing **229 ± 1 slices** (board 2 228, board
+3 230 then 229, board 4 230), first render after reset ~500 ms long (2378-2434
+ms vs 1808-1870 ms). Phase 0 DMM rail pass skipped (board 2 set the precedent;
+shared reflow and X-ray). Board 4's U5 was flagged slightly rotated at the
+2026-07-29 visual pass (`BRINGUP.md:57-66`); it reads
+`BMP581 detected (chip ID 0x50)`, so the skew is benign. No 32k-XTAL fallback
+warning on either. Board 3 logged `LP core temp: 31.28 °C`. Both wrote
+`base seq 1`. Sensors 30.65 °C (board 4), 33.79 then 31.26 °C (board 3): USB
+self-heat, not ambient. A panel-less board stalls in the BUSY wait and latches a
+fault that needs a restart: fit the panel with power off. The PPK2 occupies two
+`/dev/ttyACM*` nodes while sourcing, and two back-to-back uploads to one by-id
+path race for the port.
+
+### Soak start (2026-08-11/12)
+
+Boards 3 and 4 (`753afbc`, erased): upload SUCCESS with esptool's hash check,
+footer confirmed with no badges. A full boot → render → sleep cycle was not
+proved (release has no serial; a dump wipes RTC); the substitute is the boot
+counter past `#1` after ten minutes.
+
+Board 2 (`11cd8dd`, erased 1.2 s, still on USB so the dump cost nothing):
+`ESP_BROWNOUT_DET_LVL: 7` read from
+`.pio/build/thermometer_c6_release/config/sdkconfig.json` (release did not
+inherit the probe's SEL_3), baked `GIT_HASH` `11cd8dd` clean, no
+`PLATFORMIO_BUILD_SRC_FLAGS` (`env -u`), `LP_CORE_IDLE` commented at
+`ulp/lp_core_main.c:21`. Archive:
+`base seq 1 written 2026-08-11 22:46:18Z cursor 0x000000`,
+`formatted by 11cd8dd`, 0 / 1 / 0, identity `GDEH0576T81/BMP58x`; the timestamp
+is real wall clock (~90 s after upload) against a header
+`created (before first NTP sync)`, so NTP, the credentials and the static lease
+are live. Soak t=0 = 2026-08-11 22:49Z, USB out, 400 mAh pack in; panel then
+showed a ULP-woken refresh at 3998 mV (4004 mV on the first render, surface
+charge). Boards 2 and 4 sit ~10 cm apart as the co-located pair; the erase
+removed hundreds of brownout-edge boots from the BOD probe. Deferred for the
+soak: the FPC-in/out floor pair (19.05 µA board 2 vs 18.3 µA board 1), which
+needed ~2 h of settled windows on the PPK2 harness.
+
+Board 3 (`52cf257`, erased, output not captured): panel at t=0 4188 mV,
+`Aug 12 2026 18:27`; NTP synced at first boot (the new AP was reachable), so the
+drift anchor is real; fourth render 4186 mV (2 mV step vs board 2's 6 mV), so
+the pack is at ~4.19 V. Boards 2 and 4 run their packs as ordered, never charged
+(~4000 mV on each board before charging, which bounds VBAT divider spread at
+tens of mV); only board 3's pack was charged. Thresholds `low_battery_mv = 3550`
+/ `no_battery_mv = 3500`: board 3 has 688 mV of span, the pair ~497 mV, so the
+pair reaches cutoff first (an as-shipped cell near 4.00 V is ~three-quarters
+charged, estimated). Board 3's DHCP term was deliberately not measured before
+sealing. `! NOSYNC` at the bench was expected (destination AP absent).
+
+### Published figures re-decoded (2026-08-23 harvests)
+
+Arm 1 image: the 10 `arm`=0 records re-decode to +5066.3 ppm / ±4.5%; the
+2026-08-05 harvest published +5066 ppm (+4839…+5247, ±4.5%) off a different
+image, through a no-erase reflash and 18 days. Arm 3 image: the 3 pre-experiment
+records re-decode to +304.5 ppm against a published +305. First `arm`=1 record
+carries `d_boot = −658` (boot counter backwards across the RTC wipe; dropping it
+moves the mean 1.4 ppm). Arm 3's first record ran 3.49 d against a 12 h setting
+with `d_boot = −893` (no `erase_flash` at the arm flash, so `drift_state_load()`
+restored the 3.47 d interval). 12 of 28 arm-3 resync attempts failed, read from
+window lengths of 24 / 36 / 37 / 49 h, against `resync_fail_count == 0` at the
+day-4 gate check on a 296x128 panel too small for the sync-age token.
+
+Bench notes: `--baud 921600` fails a `--full` read on this CH340
+(`Corrupt data, expected 0x1000 bytes but received 0xff0 bytes`); 460800
+completed first time, although `history.py`'s default and help string still say
+921600. Boards 1, 2 and 4 packs took ≲5 mAh (~1% of 400 mAh) while docked. Board
+1 and arm 5 needed a manual park: the by-id node vanished ~2 s after the plug-in
+wake. Board 1 is left parked in ROM download mode (retired); arm 5 was RST'd
+back to running.
+
+### Arm 2 crossover (2026-08-23, FireBeetle)
+
+Pre-flash checks on `668ff6d`:
+`ULP size check: UlpProgramBMP390L.cpp = 110/128 words` (the `ULP_ALWAYS_WAKE`
+signature; 127/128 without), baked `GIT_HASH` clean, clean tree.
+`build_src_flags` instead of the global `build_flags` the 2026-08-05 rows used:
+every macro is read under `src/`, and `scripts/check_ulp_size.py` preprocesses
+with `build_src_flags`. Panel `! EXP 2 60s/RESYNC/REFRESH`,
+`! DRIFT +221s/12h +5085ppm n6 ±0%` (ring restored across the RTC wipe), but
+`! NOWIFI` and `! NOSYNC x1`: the working copy held board 3's network list.
+Reflashed `ef27bd0` after the fix; panel clean. Binary size is the only
+discriminator git cannot give (966624 vs 966720 B, a 96 B delta of network
+strings on an identical tracked tree); the hashes differed only because the
+arm-1 write-up was committed in between. A flash that changes `local-secrets.h`
+needs `! NOWIFI` / `! NOSYNC` checked on the first frame, and rows should name
+which secrets were compiled in. `2fccb5f` escalates absent-network retries, so
+bench time is expensive.
+
+### Arm 4 LP pin (2026-08-23, `xiao-hat`, BUG)
+
+`TEMP_DELTA_THRESHOLD_C 0.0f` cannot be a `-D` (the LP sub-build inherits no
+flags), so it was edited into `ulp/lp_core_bmp58x.h` and committed (`49245c9`).
+The header edit never reached the LP binary: `ulp_main.bin` md5 `bde10fbd3b03`,
+identical to the unmodified `0.1f` build. The panel showed
+`! EXP 4 60s/RESYNC/REFRESH` with the right hash and the upload verified. Root
+cause in `.claude/rules/ulp.md`; upstream platform-espressif32 #517, open since
+2021. Reflashed `cfcc35f` after `rm -rf .pio/build/<env> .pio/build_cache` with
+the pin in `ulp/lp_core_main.c`: md5 `14d6e676a309`, distinct from vanilla, hash
+clean, panel confirmed. Two manual parks were needed: esptool's closing
+`Hard resetting via RTS pin` released the first park and the board booted,
+rendered and slept (contrary to the 2026-07-30 finding that a park survives it).
+Pin reverted on master in `250a53f`; the sensor programs were later inlined into
+`lp_core_main.c` (`ce1e516`), so a re-pin goes there.
+
+### Return to production (2026-09-16)
+
+Arm 5 ended after 42 days (`2994f30`, no compensation on the C6), arm 4 after 24
+(`bbc7bd7`, vanilla LP binary), arm 2 after 24 (`fe3f7cb` then `68af393`, which
+refits the restored ring so the correction arms at first boot). The first drift
+record after each flash straddles the 12 h interval and is to be discarded.
+Expected panels: fresh frame, the new hash, no `! EXP`. FireBeetle confirmed:
+footer `c+4820` right after `lp0`, `! DRIFT +210s/12h +4799ppm n6 +-1%` (the
+restored arm-2 record, clears at the first resync); the level is the
+recency-weighted fit of the six restored rates. `tools/driftstats.py` re-decodes
+the arm 0 / 1 subsets to +5066.3 / +5124.6 ppm, arm 3 to +607.2 ppm, and the 32
+August arm-5 records to +877.9 ppm.
