@@ -26,63 +26,52 @@ to be fetched again from Solomon Systech.
 | `GDEH0576T81.pdf` | 920x680 | SSD2677 | `revA-bigscreen`, `xiao-bigscreen` |
 | `UC8151D.pdf` | — | UC8151D chip-level | the two UC8151 panels above |
 
-No chip-level SSD2677 doc. The SSD1677 datasheet is a relative, not the part, and
-taking its pinout for the module's cost a wrong conclusion once (below).
+No chip-level SSD2677 doc. The SSD1677 datasheet is a relative, not the part;
+taking its chip pinout as the module's cost a wrong conclusion once (below).
 
 ## What they settle: panel readback
 
 Whether a panel can answer the host is a property of its **controller**, not of
-any board, so there is no single answer. Established 2026-08-05:
+any board, so there is no single answer. Every one of these modules exposes a
+single serial data pin and no SDO: M21 and I6FD call it `SDIN`, the Z90 and T81
+call it `SDA`. Readback, where it happens, is the controller driving that same
+pin back (established 2026-08-05).
 
-**Every one of these modules exposes a single serial data pin and no SDO** — M21
-and I6FD call it `SDIN`, the Z90 and T81 call it `SDA`. Readback, where it
-happens, is the controller driving that same pin back.
+| Controller | Module data pin | Readback | Identifier | Source |
+|---|---|---|---|---|
+| UC8151D | `SDIN`, single | **measured working**: only three registers answer, `0x70` REV → `01 0e`, `0x71` FLG → `13 13`, `0x40` temperature → `d2 00`; each byte identical whether the input was pulled up or down (so actively driven), and identical before and after GxEPD2's init; `0x61` TRES and `0x00` PSR float, before init too; foreign SSD168x commands float, which is the control | `0x70` REV → `LUT_REV` from OTP `0x001`, the one panel-intrinsic value on offer, since a waveform LUT is tuned to its glass | board 2 + GDEY0213M21, 2026-08-05 |
+| SSD1681 | `SDA`, single; 4-wire read procedure documented | expected working, unmeasured | **`0x38`: 10-byte User ID in OTP**; the only thing that tells the Z90 from the GDEM0154I61 (behind the GDEY0154D67 driver), both on this controller | datasheet |
+| SSD2677 | `SDA`, single, bonded to FPC pin 14 | **returns 0 over hardware SPI**; panel capability untested | unknown | board 2 + T81, 2026-08-11 |
 
-| Controller | Module data pin | Readback | Identifier |
-|---|---|---|---|
-| UC8151D | `SDIN`, single | **measured working** on board 2 | `0x70` REV → `LUT_REV` from OTP `0x001` |
-| SSD1681 | `SDA`, single; 4-wire read procedure documented | expected working | **`0x38`: 10-byte User ID in OTP** |
-| SSD2677 | `SDA`, single | **returns 0 over hardware SPI** (2026-08-11, board 2 + T81); panel capability still untested | unknown |
+The T81's 0 is a verdict on the host, not on the panel: GxEPD2's `_readData()`
+samples the data line from software and is documented to work only in
+bit-banged mode, and this build runs hardware SPI, so nothing samples the line.
+The 0 was measured indirectly: `_Init_Full` selected the ≤5 °C waveform on a
+~26 °C panel, which is the `temp == 0` path and no other. An earlier version of
+this table called the T81 doubtful because the FPC carries no SDO; `SSD1677.pdf`
+names `SDI`/`SDO` as separate **chip** pins in 4-wire mode, but the module bonds
+a single `SDA` to FPC pin 14 like the other three, so the T81 stands where the
+M21 stood before its probe (one data pin, a module datasheet that calls it an
+input and documents no read), and the M21 answered. Untested, not unlikely.
+On the UC8151, resolution cannot be read back (TRES floats, and the datasheet
+calls it a host-set override); resolution would in any case only falsify a
+match, never confirm one, since both 200x200 panels agree on it. Nothing
+depends on a T81 read any more, which is why the SSD2677 row stops short of a
+board-level conclusion: the waveform consequence is fixed twice over in
+firmware, upstream guards the failed read with a 20–30 °C default
+(−48.4 % of panel busy time,
+[`docs/notes.md`](../../docs/notes.md#t81-waveform-lut-selection-under-hardware-spi-rev-a-board-2-2026-08-11)),
+and feeding the BMP581 reading in is strictly better than any readback:
+calibrated, ambient rather than a self-heating die, and write-only, so it needs
+no SPI-mode juggling.
 
-An earlier version of this table called the T81 doubtful "because the FPC carries
-no SDO". That was wrong: `SSD1677.pdf` names `SDI`/`SDO` as separate **chip**
-pins in 4-wire mode, but the module bonds a single `SDA` to FPC pin 14, exactly like
-the other three. The T81's position is therefore identical to the M21's before it
-was probed — one data pin, a module datasheet that calls it an input and
-documents no read — and the M21 answered anyway. Untested, not unlikely.
+Open:
 
-Probe detail, board 2 with a GDEY0213M21, 2026-08-05: only three registers
-answer, `0x70` REV → `01 0e`, `0x71` FLG → `13 13`, `0x40` temperature →
-`d2 00`, each byte identical whether the input was pulled up or down, so
-actively driven; foreign SSD168x commands floated, which is the control. The
-three answer identically before and after GxEPD2's init. `0x61` TRES and
-`0x00` PSR float, before init too, so resolution cannot be read back; the
-datasheet calls TRES a host-set override anyway. `LUT_REV` is the one
-panel-intrinsic value on offer, since a waveform LUT is tuned to its glass.
-
-`0x38` matters most: the SSD1681 drives *both* 200x200 panels (the Z90 and the
-GDEM0154I61 behind the GDEY0154D67 driver), so a User ID is the only thing that
-tells them apart — resolution cannot, and resolution can in any case only
-falsify a match, never confirm one.
-
-**The T81 read is now known to return 0 on this rig — but that is a verdict on
-the host, not on the panel.** GxEPD2's `_readData()` samples the data line from
-software and is documented to work only in bit-banged mode; this build runs
-hardware SPI, so nothing samples the line at all. Measured indirectly on
-2026-08-11: `_Init_Full` selected the ≤5 °C waveform on a ~26 °C panel, which is
-the `temp == 0` path and no other. So the panel has still never been asked; it
-has only never been listened to.
-
-That no longer costs anything, which is why the row above stops short of a
-board-level conclusion. The waveform consequence is fixed twice over in firmware
-— upstream guards the failed read with a 20–30 °C default (worth −48.4 % of panel
-busy time, `../../docs/notes.md`), and feeding the BMP581 reading in is strictly
-better than any readback: calibrated, ambient rather than a self-heating die, and
-write-only so it needs no SPI-mode juggling. What a successful probe would still
-buy is a cross-check of the controller's own sensor and an `SSD2677` row here
-that says something. It is diagnostics now, not a fix, and it was never a board
-change — see [`../thermometer-c6/README.md`](../thermometer-c6/README.md), Rev B
-candidates.
+- SSD2677 readback, probed in a mode that samples the line. What it buys is a
+  cross-check of the controller's own sensor and an SSD2677 row here that says
+  something: diagnostics now, not a fix, and never a board change
+  ([`REV-B.md`](../thermometer-c6/REV-B.md#panel-readback-sdo)).
+- SSD1681 `0x38` User ID on the Z90 and the GDEM0154I61: expected, unmeasured.
 
 ## Caveats before trusting any of this
 
