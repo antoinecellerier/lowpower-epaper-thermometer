@@ -53,8 +53,7 @@ facts that do damage when unknown:
   `tools/ppk2.py`, which integrates over regions the firmware's markers bound.
 - **A measured number can still be wrong** — a true average of the wrong thing.
   Check time evolution before blaming a mechanism, average over whole duty cycles,
-  and treat anything past the longest window captured as an estimate. How that
-  cost an afternoon: the `/device-session` skill.
+  and treat anything past the longest window captured as an estimate (`/device-session`).
 - **Device-intrinsic costs get precise figures; environment-dependent ones get an
   order of magnitude and their driver named.** A base snapshot is fixed work;
   refresh cadence is delta-triggered, so it tracks how volatile the room is.
@@ -82,7 +81,8 @@ Path-scoped, loaded when their files are touched — read before editing:
 `.claude/rules/history-store.md` (flash archive + host tooling),
 `.claude/rules/display.md` (renderer, badges, simulator),
 `.claude/rules/ulp.md` (ULP FSM / LP core),
-`.claude/rules/rtc-state.md` (RTC memory, version bumps).
+`.claude/rules/rtc-state.md` (RTC memory, version bumps),
+`.claude/rules/docs-style.md` (logbooks: entry shape, prose, numbers).
 The custom PCB has its own `hardware/thermometer-c6/CLAUDE.md`: `.kicad_sch`,
 `.kicad_pcb` and `.kicad_dru` are all generated — never hand-edit them; `make
 check` gates everything. Current phase there: `BRINGUP.md` Phase 3 (rev A in hand).

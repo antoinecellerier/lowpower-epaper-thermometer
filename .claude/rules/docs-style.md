@@ -1,0 +1,57 @@
+---
+paths:
+  - "docs/*.md"
+  - "docs/**/*.md"
+  - "readme.md"
+---
+
+# Logbook and research-doc style
+
+Written for a human scanning for a number and its conditions. Data is
+append-only; prose around unchanged data may be restructured freely.
+
+## Shape of an entry
+
+1. Heading is a neutral label: what, where, when.
+   Yes: `### Arm 5 harvest, 2026-08-23`. No: `### Arm 5 kills the duty-cycle reading`.
+2. First sentence is the result.
+3. Conditions line: rig, env, build hash, build flags, supply node, ambient.
+4. Numbers in a table. Each figure carries n, window and a source a reader can
+   open (capture file, log line, photo path, commit). One bold per table, on
+   the headline figure. "unmeasured" is a valid cell value.
+5. At most one short paragraph of interpretation, then an `Open:` list of what
+   the entry leaves unmeasured.
+
+Budget: a capture or harvest section is under ~40 lines including tables. A
+validation-log row is 3-5 lines. Longer means a second entry or a table.
+
+## Prose
+
+- One fact per sentence. No nested asides, no dashes as parentheses.
+- State what was tested, seen and concluded. Do not narrate the reasoning path.
+  Yes: "Board 4 shows no wake-rate trend, so board 2's slope is noise."
+  No: "This is the cheapest kill of a duty-cycle reading this project has
+  managed, and it cost no extra hardware."
+- A killed hypothesis gets one sentence: hypothesis, evidence, verdict.
+- Facts, not observers: `Panel: c+4820`, not "the operator read the panel".
+- Bold marks the headline figure, never a sentence. Tables: plain text in
+  setup and condition cells, bold only on the measured headline figure
+  (`readme.md` power table: bold only the `@4V2 bat` figures). Do not infer
+  formatting from neighbouring entries; this file is the spec.
+- Superseded planning text is replaced by a gate / expected / observed / date
+  table, not kept alongside the outcome.
+- Bench-operation lessons (port naming, tool flags, tool bugs) go to the
+  `/device-session` skill or the tool's own docs. The log gets a pointer at most.
+- Numbers follow CLAUDE.md "Numbers are measured, not guessed": source, date
+  and conditions travel with every figure.
+
+## Which file
+
+| File | Holds |
+|---|---|
+| `notes.md` | power: PPK2 captures, budgets, sleep floors |
+| `clock-drift.md` | RTC drift rates per board, compensation |
+| `history-store-validation.md` | flash archive results on hardware, and every flash / erase / inject as a device-state row |
+| `footprint.md` | binary size and build time, one row per significant change |
+
+`readme.md` gets a one-line pointer to the logbook, never the finding.
