@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Check or fix paragraph wrapping in a markdown doc (.claude/rules/docs-style.md).
 
-  docwrap.py check FILE...           -> lines over WIDTH+20, ragged paragraphs, links or
+  docs/docwrap.py check FILE...           -> lines over WIDTH+20, ragged paragraphs, links or
                                         code spans split across lines; exit 1 if any
-  docwrap.py fix   FILE[:START]...   -> reflow the offending paragraphs and list items at
+  docs/docwrap.py fix   FILE[:START]...   -> reflow the offending paragraphs and list items at
                                         WIDTH, whitespace only; START skips earlier lines
 
 Never touched: tables, headings, code fences, image lines, blocks of one-word lines.

@@ -48,12 +48,13 @@ entry supersedes the figure to quote; the row links to that entry.
 - Numbers follow CLAUDE.md "Numbers are measured, not guessed": source, date
   and conditions travel with every figure.
 - Wrap prose at 80 columns. Never split a link or a code span across lines.
-  `tools/docwrap.py check FILE` reports overflow, ragged paragraphs and split
-  spans; `fix` reflows them, whitespace only.
+  `tools/docs/docwrap.py check FILE` reports overflow, ragged paragraphs and split
+  spans; `fix` reflows them, whitespace only. `tools/docs/docstats.py -b REV FILE`
+  shows what a rewrite changed in size, sentence length, asides and long cells.
 
 ## Restructuring a logbook
 
-Prose may be rewritten around unchanged data. Gate it with `tools/docinv.py`:
+Prose may be rewritten around unchanged data. Gate it with `tools/docs/docinv.py`:
 
 - `diff OLD NEW`: every token missing from the new file is restored, or listed
   with a reason for the user to veto.

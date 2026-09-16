@@ -2,9 +2,9 @@
 # Gate for restructuring a logbook (.claude/rules/docs-style.md): run diff both ways.
 """Inventory the data tokens in a markdown logbook, or diff two files' inventories.
 
-  docinv.py list  FILE            -> one token per line, sorted, with count
-  docinv.py diff  OLD NEW         -> tokens in OLD not in NEW, each with OLD's first context line
-  docinv.py lines OLD NEW         -> same, but grouped by OLD line number (for a rewrite pass)
+  docs/docinv.py list  FILE            -> one token per line, sorted, with count
+  docs/docinv.py diff  OLD NEW         -> tokens in OLD not in NEW, each with OLD's first context line
+  docs/docinv.py lines OLD NEW         -> same, but grouped by OLD line number (for a rewrite pass)
 
 Tokens: numbers with a unit, dates, times, commit-ish hashes, repo paths, pio envs,
 board/arm/boot ids, temperatures, percentages. Normalised (µ/u, −/-, spaces).
