@@ -10,18 +10,9 @@ still reads in the imperative.
 
 ## 0. What this is / current state
 
-Custom ESP32-C6-MINI-1 e-paper thermometer board in
-`hardware/thermometer-c6/` — replaces the XIAO/FireBeetle dev-board rigs.
-1S LiPo + RT9080 LDO tree, P-FET-gated on-board Good-Display EPD booster
-(solder-jumper RESE 0.47/2.2/3Ω and L 10µH/47µH), universal 24-pin 0.5mm
-FPC for all six owned panels, MCP73831 charger with load-sharing USB-C,
-reverse-battery FET, high-side-switched battery divider, BMP581 with
-BMP585 alternate footprint (populate exactly one), 32.768kHz crystal,
-PPK2 series-measurement break. Design rationale, ESP32-C6 pin map, jumper
-tables and bench procedures: **read [`README.md`](README.md) first**. Extra
-background:
-memory file `project_custom_board.md`, expert-review outcomes in git log
-(`d842fee`, `f25903e`).
+Board description, pin map, jumper tables and bench procedures:
+[`README.md`](README.md). Expert-review outcomes: git log (`d842fee`, `f25903e`);
+memory file `project_custom_board.md`.
 
 **Schematic + BOM phase is DONE and verified**: `make check` green = ERC
 zero violations at all severities, exported netlist exactly matches
@@ -29,47 +20,29 @@ zero violations at all severities, exported netlist exactly matches
 invariants, footprints resolve, zero label-over-wire/body overlaps
 (build-fatal), zero wire crossings, zone frames auto-fit.
 
-**PCB phase is DONE**: layout, routing, GND pour + stitching, silkscreen and
-the `make fab` export are all complete (milestone history lives in the git
-log; ordering in [`ORDERING.md`](ORDERING.md)). The board is 48×35mm,
-2-layer, DRC-clean at full severity, every net routed. M5 closed 2026-07-12 via **complete GUI
-hand-routing by the user** (after three autorouters — greedy A*, PathFinder
-negotiation, Freerouting — all stalled on the same 12-terminal knot; see
-PATHFINDER-NOTES.md). The copper now lives wholesale in
-`generator/pcb_routes.py` (HAND_ROUTED sentinel; `make route` refuses to
-touch it; as-routed snapshot in [`archive/`](archive/)). Copper edits go
-through the GUI round-trip in [`HAND-ROUTING.md`](HAND-ROUTING.md) or direct
-polyline edits in `pcb_routes.py`,
-gated by DRC (`verify/drc_summary.py --gate` + `verify/check_pcb.py`). The
-M5-state sections and corridor surveys below are HISTORICAL archaeology.
-The topology-driven simplification (report `out/topo/REPORT.md`, tool
-`verify/topo.py`), the GND pour and the fab export are all done.
+**PCB phase is DONE**: layout, routing, GND pour + stitching, silkscreen and the
+`make fab` export are all complete (milestone history lives in the git log;
+ordering in [`ORDERING.md`](ORDERING.md)). The board is 48×35mm, 2-layer,
+DRC-clean at full severity, every net routed. M5 closed 2026-07-12 via
+**complete GUI hand-routing by the user** (after three autorouters — greedy A*,
+PathFinder negotiation, Freerouting — all stalled on the same 12-terminal knot;
+see PATHFINDER-NOTES.md). The copper now lives wholesale in
+`generator/pcb_routes.py` (HAND_ROUTED sentinel; `make route` refuses to touch
+it; as-routed snapshot in [`archive/`](archive/)). Copper edits go through the
+GUI round-trip in [`HAND-ROUTING.md`](HAND-ROUTING.md) or direct polyline edits
+in `pcb_routes.py`, gated by DRC (`verify/drc_summary.py --gate` +
+`verify/check_pcb.py`). The M5-state sections and corridor surveys below are
+HISTORICAL archaeology. The topology-driven simplification (report
+`out/topo/REPORT.md`, tool `verify/topo.py`), the GND pour and the fab export
+are all done.
 
-How this project works (do not break it):
-- The `.kicad_sch` is GENERATED. Single source of truth =
-  `generator/circuit.py` (components/nets/NC/LCSC) + `generator/layout.py`
-  (schematic placement, wires, labels, power symbols, PWR_FLAG anchors).
-  Never hand-edit the `.kicad_sch`. After any change: `make check`.
-- Schematic changes → also update `verify/invariants.py` when intent
-  changes, and README tables.
-- Per-zone visual review recipe (200 DPI crops from the PDF):
-  `make pdf`, then for a zone with origin (ox,oy) and size (w,h) from
-  layout.ZONES:
-  `pdftoppm -r 200 -png -x $((int((ox-10)*7.874))) -y ... -W ... -H ...
-  out/thermometer-c6.pdf zone` (scale = 200/25.4 px/mm); Read the PNG,
-  fix in layout.py, regenerate. Iterate until clean.
-- Commits: directly on master, imperative present tense, no prefixes.
-
-Decisions already made by the user (do not re-ask): indoor-only charging
-0–45°C (goes on silkscreen), BMP581/585 populate-exactly-one, JP5 10µH
-default / JP6 47µH (pair with JP3 2.2Ω for GDEH0576T81), 100mA charge
-current, ~400–500mAh pouch, target fab JLCPCB. (Assembly tier: **Standard**, not
-economy — ENIG and POFV each disable economy and U1 + U5 are Standard-only
-parts. Settled in [`ORDERING.md`](ORDERING.md) §3; the draft above assumed
-economy before that was known.)
-
-Deliverables this phase: `thermometer-c6.kicad_pcb`, JLCPCB fab zip
-(gerbers+drill), assembly BOM + CPL CSVs, updated README + this file.
+How the project works (generated artifacts, the `make check` gate):
+[`CLAUDE.md`](CLAUDE.md); commit style: the root CLAUDE.md. The per-zone
+`pdftoppm` review recipe: the `pcb-edit` skill. Decisions already made:
+charging window, charge current and Standard assembly in CLAUDE.md "Settled
+decisions" and [`ORDERING.md`](ORDERING.md) §3; populate-exactly-one pairs,
+jumper defaults and the ~400–500mAh pouch in [`README.md`](README.md); target
+fab JLCPCB.
 
 ## 1. Pre-layout tasks
 
@@ -137,6 +110,32 @@ reference, and it is loaded automatically.
 - VBAT_ADC is a 50k Thevenin node: short, and away from the EPD HV nets and
   the switch node.
 - No traces under the MINI-1 antenna region, either layer.
+
+### M5 passes
+
+| Pass | Date | Expected | Observed |
+|---|---|---|---|
+| `b5dfecf`: TP7, TP9, R7 moved, sensor corner rebuilt, debug B.Cu lanes and BOOT's crossing authored | 2026-07-10 | fix directions for each straggler (list below) | **13 stragglers**: VBUS_SENSE ×2, DBG_IO5, the NE gate cluster (6), SCL, ~EPD_VPP, LED_STATUS |
+| VBUS_SENSE divider moved beside Q1, C9/R6 yard authored, VBUS_SENSE routed last | 2026-07-10 | the west-funnel nets clear | 12 stragglers; the uncommitted NE-gate discovery solved six NE nets and broke eight others, net 14 |
+| NE gate harvested: TX 45° climb, VBUS_SENSE fed from below, SCK/MOSI/EPD_PWR_EN/~EPD_VDD and most of XTAL_32K_P authored | 2026-07-10 | the discovered paths authored one cluster at a time | 12 stragglers; XTAL_32K_P's C10.1/R9.1 island the structural one |
+| Greedy A*, PathFinder negotiation, Freerouting | to 2026-07-12 | one of the three closes the knot | all three stalled on the same 12-terminal knot; **M5 closed 2026-07-12 by complete GUI hand-routing**, copper now in `generator/pcb_routes.py` |
+
+The sections that follow are the record behind each row, kept verbatim.
+
+Negative results (each one `make route`; do not repeat):
+
+| change | stragglers | what it broke |
+|---|---|---|
+| debug nets early in `ROUTE_PLAN` | 20 | `DBG_IO8` takes U1's east flank → `USB_D±`, `XTAL_32K_P`; `EN`→J5.3, `+3V3`→J5.2 |
+| authored `L2.1`↔`C14.1` link | 17 | re-seeds `EPD_VCC` → `EPD_CS`, `EPD_DC`, `EN` |
+| `EPD_VCC` terminals, L2 before C14 | ≥21 | `DBG_TX`, `EN`×2, `XTAL_32K_P` |
+| authored U1 escapes, UART north of the row | 18 | `BOOT`→`SW2` (SW2 sits directly north) |
+| debug bands at y16.45..17.35 | 21 | crystal cell (XTAL via halos at y17.55) + SDA/SCL diagonals + CS/DC via displacement |
+| debug bands crossing x21.95 below y14.45 | 25 | evicts EPD_VCC's C14 spine → 0.5mm pocket wall → J4 five + TX/RX loop the board edge |
+| debug band/descent ending x30.7..31.4 | +5 | evicts ~EPD_VGH's x31.05 weave → F.Cu SE sweep → `VCOM`×2, `VSL`, `VDD`, `PREVGH` |
+| authored pocket tails east of x34 | 25 | panel-cap service area starved (`VDD`'s C21 via zone, `VCOM`→C25/TP10) |
+| SCK authored: y7.75 band + x32.3 column | 26 | crossed EPD_VCC's Q2.3 channel → `EPD_VCC`×6, `MOSI`, `USB_D-`, `EN`×2, `VBUS` (reverted) |
+
 
 ### M5 state: 12 stragglers after the NE-gate harvest (2026-07-10)
 
@@ -309,20 +308,6 @@ Remaining 13, with fix directions:
   Candidates: F flank east then around, or move D3/R8 (the step-4
   investigation of what D3's placement costs was never done).
 
-Negative results (each one `make route`; do not repeat):
-
-| change | stragglers | what it broke |
-|---|---|---|
-| debug nets early in `ROUTE_PLAN` | 20 | `DBG_IO8` takes U1's east flank → `USB_D±`, `XTAL_32K_P`; `EN`→J5.3, `+3V3`→J5.2 |
-| authored `L2.1`↔`C14.1` link | 17 | re-seeds `EPD_VCC` → `EPD_CS`, `EPD_DC`, `EN` |
-| `EPD_VCC` terminals, L2 before C14 | ≥21 | `DBG_TX`, `EN`×2, `XTAL_32K_P` |
-| authored U1 escapes, UART north of the row | 18 | `BOOT`→`SW2` (SW2 sits directly north) |
-| debug bands at y16.45..17.35 | 21 | crystal cell (XTAL via halos at y17.55) + SDA/SCL diagonals + CS/DC via displacement |
-| debug bands crossing x21.95 below y14.45 | 25 | evicts EPD_VCC's C14 spine → 0.5mm pocket wall → J4 five + TX/RX loop the board edge |
-| debug band/descent ending x30.7..31.4 | +5 | evicts ~EPD_VGH's x31.05 weave → F.Cu SE sweep → `VCOM`×2, `VSL`, `VDD`, `PREVGH` |
-| authored pocket tails east of x34 | 25 | panel-cap service area starved (`VDD`'s C21 via zone, `VCOM`→C25/TP10) |
-| SCK authored: y7.75 band + x32.3 column | 26 | crossed EPD_VCC's Q2.3 channel → `EPD_VCC`×6, `MOSI`, `USB_D-`, `EN`×2, `VBUS` (reverted) |
-
 ### M5 corridor survey (historical; U1 escapes and TP7 now done)
 
 Every debug signal (`DBG_TX/RX/IO5/IO8`, `VBUS_SENSE`) has to cross the board
@@ -374,26 +359,22 @@ preview walk, and archiving — lives in **[`ORDERING.md`](ORDERING.md)**
 
 ## 6. First-article bench checklist (PPK2)
 
-**Superseded by [`BRINGUP.md`](BRINGUP.md)**, which is the checklist that was
-actually run and carries the results. This draft is kept for the reasoning
-behind each item; where the two disagree, BRINGUP wins. In particular item 1
-was done through J1 rather than J2, and item 5's two open questions are both
-answered — C29 is populated, and the threshold was re-derived to 3550/3500 mV
-from a measured ~300 mV refresh-peak droop, not the ~3.4–3.5 V guessed here.
-
-1. Smoke: bench-supply via J2 (VBAT side), current-limited 50mA, no panel.
-2. Sleep floor vs the 15.5–19µA dev-rig baselines; hunt surprises (SS14
-   reverse leakage at temperature — swap to PMEG6010 class if hot floor
-   drifts; MCP73831 BAT leakage).
-3. EPD_VCC ramp with soft-start (R24/C28): scope for rail dip at gate-on;
-   panel refresh energy vs DESPI numbers, both RESE/L configs.
-4. 32k crystal: confirm oscillation + cold start (freezer test); populate
-   R9 10M only if marginal; consider 7pF FC-135 variant if batch-marginal.
-5. VBAT_ADC accuracy vs DMM across 3.3–4.2V; decide C29 populate; re-derive
-   the firmware shutdown threshold (~3.4–3.5V; 3700mV is a buck-era number).
-6. USB: enumerate, charge at 100mA, VBUS_SENSE reads, load-share handover
-   (plug/unplug scope on VSYS), no-battery USB operation incl. refresh.
-7. Reverse-battery test on a sacrificial JST pigtail (it should just block).
+Superseded by the checklist that was run, with its results:
+[`archive/bringup-rev-a-first-article.md`](archive/bringup-rev-a-first-article.md);
+where the two disagree, that record wins. What only this draft held: item 1
+was run through J1 rather than J2; the sleep floor was to be compared with the
+15.5–19 µA dev-rig baselines, with SS14 reverse leakage at temperature (swap to
+PMEG6010 class if a hot floor drifts) and MCP73831 BAT leakage as the suspects;
+32k cold start by freezer test, R9 10M only if marginal, a 7 pF FC-135 variant
+if batch-marginal; VBAT_ADC against a DMM across 3.3–4.2 V, C29 to decide
+(populated); the shutdown threshold guessed here at ~3.4–3.5 V (3700 mV being a
+buck-era number) was re-derived to 3550/3500 mV from a measured ~300 mV
+refresh-peak droop; reverse-battery test on a sacrificial JST pigtail. Two
+draft items the record does not carry: EPD_VCC ramp with the R24/C28
+soft-start, scoping for rail dip at gate-on and comparing panel refresh energy
+with the DESPI numbers in both RESE/L configs; and the USB set (enumerate,
+charge at 100mA, VBUS_SENSE reads, load-share handover with a plug/unplug scope
+on VSYS, no-battery USB operation including refresh).
 
 ## 7. Firmware follow-ups (tracked, not this phase)
 
@@ -405,7 +386,6 @@ which has no divider.
 - New board define: pins per README map (EPD 18–23, gate 14, LED 15,
   divider 2/3, VBUS sense 4, 32k crystal sdkconfig, BMP58x INT config
   int_en=1/int_od=0/drv=0).
-- **Implement `read_battery_level()`** — highest-priority firmware item;
-  whole low-battery strategy currently stubs to 4321.
+- Implement `read_battery_level()`: shipped, see above.
 - Gate refreshes below ~0°C (panel spec) using BMP58x temperature; refuse
   charge-OK indication below 0°C; ignore VBAT_ADC while VBUS present.
