@@ -36,116 +36,25 @@ this file is the human procedure around it. Settled fab decisions live in
       `generator/pcb_layout.py` rather than shipped as a stale artifact whose
       only two outcomes were "silently scrubbed" or "printed literally".
 
-## 2b. Confirmations raised for the 2026-07-20 order — all resolved
-##     (drafted 2026-07-18; the order was paid 2026-07-20 and the boards landed
-##     2026-07-29. Dispositions actually taken: `archive/README.md`, "Known
-##     items carried into the order")
+## 2b. Confirmations raised for the 2026-07-20 order
 
-- [x] **JLCJLCJLCJLC token under "Remove Mark" — RESOLVED 2026-07-20, token
-      DELETED.** Support's answer was that the order-number-at-a-specified-
-      position service "is already unavailable", i.e. the token could never do
-      its job — leaving it risked only the literal string printing on back
-      silk. The `SILK` entry was removed from `generator/pcb_layout.py`; the
-      board now ships with no order mark. Nothing left to confirm.
-- [x] **J4 GEOMETRY + ROUTING DONE (respin
-      2026-07-19, depth corrected 2026-07-20).** Numeric STEP analysis
-      (`out/j4-proof/` + the manufacturer drawing
-      `datasheets/XUNPU_FPC-05FB-NPH20.pdf`) proved the FPC-05FB's SMT tails
-      are at the REAR (actuator) face; the old placement (tails on the east pad
-      column) pointed the mouth WEST into the board so the panel cable could
-      not mate. J4 is re-placed mouth-EAST, contact-tail/pad column WEST
-      (x41.45), footprint pads renumbered so pad 1 = panel circuit 1 stays at
-      the NORTH end (circuit.py and the README FPC pin table unchanged).
-      Body depth is **5.40** and the mouth sits **4.95mm** east of the pad row
-      at x46.40 — 1.60mm inboard of the edge, not flush. (The earlier 6.55/6.6
-      figures came from bounding-boxing raw CARTESIAN_POINTs, which include
-      LINE/AXIS2_PLACEMENT_3D entities owning no geometry; VERTEX_POINT-only
-      gives 5.40, matching the XUNPU drawing exactly — `out/j3-land/` §7.)
-      The 24-pin fanout is **re-routed and complete**: 0 unconnected, DRC
-      REAL=0 DEFERRED=0 WAIVED=0 at full severity. JLC's preview model showed
-      the true orientation all along (tails with actuator); the land pattern was
-      the error.
-      **Resolved:** the CPL rotation delta stayed `0`/`confidence: low` and was
-      covered by Confirm Parts Placement + the DFM gate rather than a preview
-      re-walk (`archive/README.md`). J4 pin-1 and mouth-east are now
-      hardware-verified on board 1 by continuity (`BRINGUP.md` Phase 0).
-- [x] **J3 DATUM + LAND + ROUTING DONE
-      (respins 2026-07-19 + 2026-07-20).** The 2026-07-19 pass (`out/j3-proof/`)
-      fixed the ORIENTATION: the old rot-0 placement sat the HRO USB-C mouth
-      facing SOUTH into the board with the solder tails at the north edge — an
-      unpluggable connector, masked by a 3D model mis-registered 180°. J3 was
-      re-placed mouth-NORTH (rot 180). The 2026-07-20 pass fixed the DATUM and
-      the LAND, and both were wrong:
-      * **Datum** (`out/j3-datum/`, datasheet content-stream parse + 1200dpi
-        raster + STEP, three methods agreeing to ≤0.005mm). HRO's `5.79` is
-        measured **PCB EDGE → ⌀0.60 NPTH post CENTRELINE**, not to the pad row,
-        and `4.18` is **shell-slot centre to shell-slot centre**. The front
-        shell slot therefore belongs **2.11mm** from the edge, not 0.695 — J3
-        was **1.415mm too far north**. Fixed: `PLACE["J3"]` y 1.745 → 3.160.
-      * **Land** (`out/j3-land/`, solder foot isolated from the STEP by
-        colour + planarity + z=0, measured 0.850mm). The stock KiCad land left
-        only **+0.080mm heel** protrusion (below IPC-7351B *Least* 0.25, and
-        negative under the tolerance stack) while spending +0.520 on toe. The
-        footprint is now a project fork,
-        `local:USB_C_Receptacle_HRO_TYPE-C-31-M-12`, with the SMT row shifted
-        0.170mm toward the mouth and the NPTH posts 0.65 → 0.60mm (HRO's own
-        value — it is what makes the shift legal at the 0.25mm `hole_clearance`
-        rule). Result: heel **+0.250** / toe **+0.350**, 100% of the 0.200mm
-        heel-fillet zone covered.
-      The `edge-clearance-usb-c` DRU rule and its `drc_summary` waiver are
-      **DELETED**. They existed only to waive 2 `copper_edge_clearance` errors
-      caused by the front shell pad hanging 0.105mm OFF the board edge — a
-      symptom of the placement error, not a property of an edge-launch part.
-      The edge web is now 1.510mm and full-severity DRC is REAL=0 **WAIVED=0**
-      with no J3 exception. `check_pcb.py` §9b now asserts the whole datasheet
-      chain (front slot 2.110 from the edge, 4.180 slot span, 3.650 to the NPTH,
-      4.925 to the pad row) plus "no shell pad overhangs the edge", so a datum
-      regression fails the gate instead of being waived.
-      The cut copper is **re-routed and complete** — VBUS, D+ and D− to the
-      y7.035 pad row, plus EPD_BUSY, EPD_RST and the VSYS north crossing the
-      datum-correct body sits on. Board-wide: 0 unconnected, 0 dangling, DRC
-      REAL=0 DEFERRED=0 WAIVED=0 at full severity, schematic parity 0.
-      **Preview walked 2026-07-20 — placement CONFIRMED, the render is a JLC
-      model artifact, and JLC support confirmed it.** Their 3D preview draws
-      the whole J3 model — housing, solder tails AND shell legs together —
-      about 1.3mm off the land pattern, so the tails miss the pads and the
-      legs miss the holes. That is a rigid-body displacement of the model,
-      which is exactly the (0, −1.050, 0) correction `pcb_layout.MODELS_3D`
-      already applies to seat this EasyEDA STEP (its origin is the
-      front-shell reference, not the land centroid); JLC's viewer applies no
-      such correction. Cross-checked by parsing the shipped gerber+drill zip
-      directly: front shell slot 2.110 from the edge (HRO 2.1078), rear 6.290
-      (6.2794), NPTH 5.760 — and the intended mouth overhang is **0.490** =
-      HRO's own 2.600 − 2.110. `check_pcb.py` §9b(b) pins the front slot
-      absolutely at 2.110 ±0.05, so a datum error of this size would fail the
-      gate by ~25×; it passes.
-      **JLC chat 2026-07-20 (agent Oscar), verbatim:** *"you can proceed to
-      order … sometimes our system's 3d model have issue causing the part
-      misalign … our engineer will manually correct it for you"*, and *"if
-      there is any issue our engineer will inform you via email"*. Asked
-      whether misalignment has to be flagged explicitly or is caught anyway:
-      *"yes it will be pause if issue were found … our engineer will review
-      for you first … if there is any issue it will pause and send you email
-      … **it will not proceed without your confirmation**"*. So DFM review is
-      a hard gate on their side, not an opt-in. That closes the residual
-      pick-and-place-origin question as far as a frontline answer can.
-      Keep the J3 clause in the PCBA Remark (§3) and Confirm Parts Placement
-      = Yes anyway — they cost nothing and leave a paper trail, and the
-      remark explicitly asks them NOT to silently adjust the placement.
-      **Resolved:** the rotation delta stayed `0`/`confidence: low`, covered by
-      Confirm Parts Placement + the DFM gate (`archive/README.md`). The
-      X-rays show J3's 0.5mm row resolving individually with no bridging, and
-      board 1 enumerates over USB.
-- [x] **D1 CPL DELTA RESET (respin 2026-07-20).** The mouth-north J3 USB
-      reroute re-placed D1 (**CHG** LED) rot 90 → 180, voiding its 2026-07-18
-      LED_0603 preview verification; its CPL delta was reset to 0 (unverified)
-      via a `REF_ROTATION_OVERRIDES["D1"]` entry.
-      **Resolved without a re-walk:** its `0` was directly preview-verified
-      2026-07-18 (cathode cue S), and a rotation delta corrects a
-      footprint↔library convention offset, so it is independent of the
-      placement change that voided the annotation (`archive/README.md`).
-- [ ] **Feeder count:** Feeders Loading fee bills 17 × ~€2.75 while the BOM
-      has 16 Extended lines — ask which parts are counted (≈€2.75 delta).
+Drafted 2026-07-18; the order was paid 2026-07-20 and the boards landed
+2026-07-29. All four items are closed. The dispositions taken and the as-built
+state are the archive's
+[known items carried into the order](archive/README.md#order-2026-07-20--the-rev-a-production-order-first-order);
+the J3 datum and land derivation is recorded there too.
+
+| Item | Raised | Disposition | Closed |
+|---|---|---|---|
+| `JLCJLCJLCJLC` order-mark token under "Remove Mark" | 2026-07-18 | Token deleted from `generator/pcb_layout.py`. JLC support answered that the order-number-at-a-specified-position service "is already unavailable", so the token could never do its job and risked only printing literally on back silk. The board ships with no order mark. | 2026-07-20 |
+| J4 (FPC-05FB) geometry and routing | 2026-07-18 | Re-placed mouth-east, contact-tail/pad column west (x41.45), pads renumbered so pad 1 = panel circuit 1 stays at the north end; `circuit.py` and the README FPC pin table unchanged. Body depth 5.40, mouth 4.95mm east of the pad row at x46.40, 1.60mm inboard of the edge; the earlier 6.55/6.6 figures came from bounding-boxing raw CARTESIAN_POINTs (derivation: README "BOM"). Fanout re-routed: 0 unconnected, DRC REAL=0 DEFERRED=0 WAIVED=0 at full severity. CPL delta stayed `0`/`confidence: low`, covered by Confirm Parts Placement and the DFM gate. Pin 1 and mouth-east verified by continuity on board 1 (`BRINGUP.md` Phase 0). | respin 2026-07-19, depth corrected 2026-07-20 |
+| J3 (USB-C) datum, land and routing | 2026-07-18 (datum and land 2026-07-20) | 2026-07-19 (`out/j3-proof/`): re-placed mouth-north (rot 180); the old rot-0 placement faced the mouth south into the board, an unpluggable connector masked by a 3D model mis-registered 180°. 2026-07-20: datum moved 1.415mm south and the land pattern forked (figures in the archive); the `edge-clearance-usb-c` DRU rule and its waiver deleted; copper re-routed, board-wide 0 unconnected, 0 dangling, DRC REAL=0 DEFERRED=0 WAIVED=0 at full severity, schematic parity 0. Preview walked 2026-07-20: the ~1.3mm offset is a JLC model-seating artifact, confirmed by JLC support with DFM as a hard gate on their side, as far as a frontline answer can. CPL delta stayed `0`/`confidence: low`, covered by Confirm Parts Placement and the DFM gate. X-rays show the 0.5mm row unbridged; board 1 enumerates over USB. | respins 2026-07-19 and 2026-07-20 |
+| D1 (CHG LED) CPL delta reset to 0 by the J3 reroute (rot 90 → 180), voiding its 2026-07-18 LED_0603 preview verification | 2026-07-20 | Resolved without a re-walk: its `0` was preview-verified 2026-07-18 (cathode cue S), and a rotation delta corrects a footprint↔library convention offset, so it is independent of the placement change. | 2026-07-20 |
+
+The J3 clause stays in the PCBA Remark (§3) and Confirm Parts Placement stays
+Yes: they cost nothing, leave a paper trail, and the remark asks JLC not to
+silently adjust the placement. The feeder-count question raised with this
+order is open in §4.
 
 ## 3. Assembly options
 
@@ -216,7 +125,7 @@ JLC's part API — the BOM dialog is still ground truth at order time):
 - [ ] **Try matching D4–D6 MBR0530 → B5819W C8598** in the BOM dialog —
       confirmed Basic 2026-07-23 (621k stock, $0.029, SOD-123, Vf
       600mV@1A). One Extended feeder line saved *if* feeders are billed
-      per Extended line (see below). Leakage/Vf deltas are fine for the
+      per Extended line (the feeder item below). Leakage/Vf deltas are fine for the
       gated booster.
 - [x] **Tiers verified 2026-07-23 (JLC part API)**: C98192, C5204746,
       C469327 (stock 6,445 — thin), C2856831 all **Extended**. No Basic
@@ -224,15 +133,17 @@ JLC's part API — the BOM dialog is still ground truth at order time):
       marginal for the ~22V EPD rails); nearest Basic alternative is
       **C440198** 10µF 50V X5R 0805 (2.4M stock) — a candidate line-kill
       needing booster re-validation, see README.
-- [ ] **Check the feeder-fee model on the next itemised quote**: JLC's
-      live assembly-price page (updated 2025-09-01) documents Standard
-      PCBA at **$1.50 per unique line, Basic included** (Economic: $3 per
-      Extended line, Basic free) — yet the 2026-07-20 quote billed
-      17 × €2.75, which matches the $3/Extended model, not the documented
-      one. The "2025-12-19 rate cut" turned out to be a third-party page
-      edit, not a JLC announcement. Which model actually bills decides
-      whether Basic swaps save feeder money at all — ask support which 17
-      parts were counted.
+- [ ] **Feeder count and fee model, open since the 2026-07-20 order.** The
+      Feeders Loading line billed 17 × ~€2.75 (€46.75, §8) while the BOM had
+      16 Extended lines on 2026-07-18 and the BOM tab counted 15 Extended
+      lines on 2026-07-20. JLC's live assembly-price page (updated
+      2025-09-01) documents Standard PCBA at **$1.50 per unique line, Basic
+      included** (Economic: $3 per Extended line, Basic free); 17 × €2.75
+      matches the $3/Extended model, not the documented one. The "2025-12-19
+      rate cut" was a third-party page edit, not a JLC announcement. Which
+      model bills decides whether Basic swaps save feeder money at all. Ask
+      support which 17 parts were counted (≈€2.75 per line), and check the
+      model on the next itemised quote.
 - [ ] **Quote POFV at qty 5/10/20** once, to learn whether the €44.07 is
       flat per order (amortises with volume) or scales — this decides how
       urgent the POFV-free rev B re-route is. Not documented anywhere
@@ -292,7 +203,7 @@ a bare total (~€205), which made "did that change?" unanswerable.
 | — Confirm Production file | 0.91 | |
 | **Standard PCBA** | **140.46** | |
 | — Components (35 items) | 49.62 | 37 BOM lines, 35 unique parts — see below |
-| — Feeders Loading | 46.75 | **= 17 × €2.75 exactly** — the open feeder question |
+| — Feeders Loading | 46.75 | **= 17 × €2.75 exactly**; the feeder question is open in §4 |
 | — Setup Fee | 22.32 | |
 | — X-Ray Inspection | 11.46 | mandatory (U1 shield + U5 LGA); tiered per piece ≈ 2 × 4 × $1.57 |
 | — Stencil | 7.17 | |
@@ -323,9 +234,8 @@ would have mattered: R20/R21 are the VBAT_ADC divider and are spec'd 1% —
 C25741 is `0402WGF1003TCE`, whose `F` code IS ±1%, so the merge does not
 quietly downgrade battery-sense accuracy.
 
-Deltas worth watching next round: the feeder count (17 billed vs 15 Extended
-lines counted in the BOM tab 2026-07-20), and whether X-Ray and depanel are
-optional.
+Deltas worth watching next round: the feeder count (§4), and whether X-Ray
+and depanel are optional.
 
 Settled deliberately 2026-07-20, do not "correct" these: **white** solder
 mask (not green) and **lead-free / high-temp** solder paste.
