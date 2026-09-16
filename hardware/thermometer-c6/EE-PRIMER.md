@@ -119,5 +119,6 @@ keyed to actual reference designators so you can follow along in the PDF.
 
 µA = 10⁻⁶A. The sleep budget here is ~15–20µA total; a single always-on
 divider (~10µA) or an ungated booster (~534µA) dwarfs it. mC = millicoulomb
-= charge per event: 100mC per refresh, hourly, averages 100mC/3600s ≈ 28µA
-— which is why refresh energy and sleep floor matter equally.
+= charge per event: an illustrative 100mC per refresh, hourly, averages
+100mC/3600s ≈ 28µA, which is why refresh energy and sleep floor matter equally.
+Measured values per rig: [`docs/notes.md`](../../docs/notes.md#results).
