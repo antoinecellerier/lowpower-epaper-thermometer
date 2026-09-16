@@ -70,6 +70,9 @@ device datasheet (a wrong symbol passes every automated check at once).
    first render.
 6. **Crystal 20pF load assumes ~2.5pF stray** — correct nominal; cold-start
    already a first-article item (7pF FC-135 variant is the fallback).
+   **Observed 2026-08-23**: measured on the three rev A boards,
+   [`docs/clock-drift.md`](../../docs/clock-drift.md#fc-135-harvest-2026-08-23),
+   with the load-cap reading in the entry that follows it.
 7. **`datasheets/XUNPU_FPC-05FB-NPH20.pdf` was corrupted** (circular xref)
    — replaced 2026-07-20 with the ghostscript-repaired LCSC copy
    (C2856831 datasheet = the same FPC-05FB-NPH20 manufacture drawing;
