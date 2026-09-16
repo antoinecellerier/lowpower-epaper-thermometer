@@ -161,9 +161,11 @@ BOOT button on this chip, has nothing to talk to. Three ways in, cheapest first:
 3. **Park it manually**: hold BOOT, tap RST, release BOOT, with no process
    holding the port. This is what board 1 needed before the window existed.
 
-**A manually parked chip stays parked after the upload — press RST or the new
-firmware never runs.** esptool's own reset does not release the park, so the app
-never starts and the panel keeps holding its last frame. That reads exactly like
+**A manually parked chip may or may not survive the upload.** esptool's closing
+RTS reset has released the park on one run and not on another
+(`docs/history-store-validation.md`), so don't assume either way. When the park
+survives, the app never starts and the panel keeps holding its last frame. That
+reads exactly like
 "the flash didn't take", and the tells are subtle: the board stays *enumerated*
 indefinitely (the ROM bootloader keeps USJ alive, where a running board would
 deep-sleep and drop off the bus within seconds), esptool keeps answering, and any
@@ -242,9 +244,8 @@ The image is built by the real store code, so it cannot disagree with the
 firmware's format. `restore` is MAC-checked, so the image has to be stamped with
 the target device's MAC (`esptool read_mac`).
 
-**Build without `MOCK_DISPLAY_DATA`.** It fills RTC history in RAM, which takes
-precedence over anything restored from flash, so the panel shows plausible data
-that never came from the archive — a false pass that is hard to spot.
+**Build without `MOCK_DISPLAY_DATA`**: it masks the archive with RAM data
+(`.claude/rules/display.md`).
 
 ## 7. PPK2
 
@@ -287,7 +288,8 @@ Prefer a physical guard over any of the above: visually distinct or
 differently-keyed harnesses for BAT vs 3V3. Note also that **the hat's JST2 is
 not a battery input** — energising it gives a ~0.2 ms 14 mA inrush and then
 nothing, which reads exactly like a dead board. Probe the XIAO's soldered BAT
-connector, which also bypasses the shield's ETA9740 path and its ~330-500 µA.
+connector, which also bypasses the shield's ETA9740 path and its idle drain
+(`docs/wiring.md`).
 
 **Read the `PPK2_DEBUG` block in `include/app_common.h` for the current pin
 assignments before wiring anything.** It defines which GPIO drives which PPK2
@@ -322,31 +324,33 @@ Practicalities:
 ### Reading a measurement — where a whole afternoon went
 
 A measured number can be wrong in ways an estimate cannot: it can be a real
-average of the wrong thing. These are the specific ways it happened here.
+average of the wrong thing. These are the specific ways it happened here; the
+figures behind them are in the C6 budget entry of `docs/notes.md`, and this file
+does not restate them.
 
 - **A window mean is not a device property.** Before attributing any figure to a
   mechanism, look at its *time evolution* — per-second means, not one average.
-  Five sleep-floor figures spanning 26–141 µA on the C6 rig were a single
-  post-wake transient averaged over windows containing different amounts of it,
-  and each one got its own hardware explanation before anyone plotted it.
+  Several C6 sleep-floor figures were one post-wake transient averaged over
+  windows containing different amounts of it, and each got its own hardware
+  explanation before anyone plotted it.
 - **Average rates over whole duty cycles, and check the bench rate against the
   field rate.** A floor is only meaningful over complete wake-to-wake cycles.
-  Bench delta wakes every ~60 s put the post-wake transient at ~40% duty; the
-  field rate of 31 wakes/day puts it at ~1%, which is a 50% difference in the
-  headline number.
+  A bench wake cadence gives the post-wake transient a far larger duty than the
+  field cadence does, which moves the headline floor materially.
 - **Extrapolating past the longest window measured is an estimate.** Label it.
-  The longest sleep window ever captured here is 163 s against a ~46 min
-  deployment interval, so any deployed-floor figure is an extrapolation until a
-  wake-free capture of a full interval exists.
+  A deployed-floor figure is an extrapolation until a wake-free capture of a
+  full deployment interval exists for that rig; the longest window per rig is
+  in `docs/notes.md`.
 - **Instrumentation changes what it measures.** `PPK2_DEBUG` adds a triple 50 ms
-  D1 preamble to every archive persist — 300 ms of awake time, ~4–6 mC per wake.
+  D1 preamble to every archive persist, awake time and charge a production
+  build does not spend.
   Compare debug figures only with debug figures, and prefer a production build for
   anything that ships in the budget.
 - **`CPU_ACTIVE` is a lower bound.** The marker rises after the ROM and IDF
-  preamble (~45 ms unmarked since `f07d2c9`, 445 ms before it), so a
-  marker-bounded wake omits that much; bracket with `--from/--to` when the
-  preamble matters.
-- **The ±0.7 µA fuzz on a sleep floor at 100 ksps is PPK2 low-range noise.**
+  preamble, so a marker-bounded wake omits that much (the preamble length per
+  build is in `docs/notes.md`); bracket with `--from/--to` when the preamble
+  matters.
+- **Sample-to-sample fuzz on a sleep floor is PPK2 low-range noise.**
   Quote the window average. Fabric versus open air under the board changed
   nothing beyond the post-wake transient.
 - **Near a suspected voltage edge, step 100 mV at a time, not a sparse `--mv`
@@ -356,13 +360,13 @@ average of the wrong thing. These are the specific ways it happened here.
   counter-example.** Digital-probe leakage, the shield's ETA9740 and the
   acquisition path were each proposed as the cause of an elevated floor, and each
   died on the same observation: the variable was present in the *low* reading too.
-- **A single contradicting capture is data, not an outlier.** One flat 57 s
-  window got dismissed as noise; it was the only evidence that the transient is
+- **A single contradicting capture is data, not an outlier.** One flat window
+  got dismissed as noise; it was the only evidence that the transient is
   not a deterministic consequence of every wake, which is still unexplained.
 - **Sanity-check against the instrument's limits.** A capture here contained
-  samples reading 17–20 A on an instrument that stops near 1 A, as bit-identical
-  quartets at two separate times — a decode artifact, and four such samples in a
-  500k-sample bin shift its mean by ~160 µA.
+  samples far above what the PPK2 can source, as bit-identical quartets at two
+  separate times — a decode artifact, and a handful of such samples move a bin
+  mean measurably.
 - **`ppk2_api` reports every conversion failure as "Measurement outside of
   range!"** from a bare `except`, so a missing decoder field (mode, vdd,
   modifiers) presents as corrupt data. `tools/ppk2.py raw` writes a sidecar with
