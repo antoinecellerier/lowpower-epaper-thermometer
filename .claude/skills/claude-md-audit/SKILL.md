@@ -98,12 +98,13 @@ grep -nE '/home/[a-z]+|/Users/[a-z]+' "$@" $(git ls-files 'docs/*.md')
 **References to specific gitignored files** — they rot on clone.
 
 ```bash
-grep -ohE '`[a-zA-Z0-9_./-]+`' "$@" | tr -d '`' | grep '/' | sort -u \
+grep -ohE '`[a-zA-Z0-9_./-]+`' "$@" | tr -d '`' | grep '/' | grep -v '^/' | grep -v -- '^--' | sort -u \
   | grep -vxF -e include/generated/ -e include/local-secrets.h -e .claude/settings.local.json \
+  | grep -vxF -e .pio/build_cache -e local/sweeps/ \
   | while read -r p; do git check-ignore -q "$p" && echo "IGNORED-PATH REF $p"; done
 ```
 
-The three names in that `grep -vxF` allowlist are **conventions, not violations**
+The names in that `grep -vxF` allowlist are **conventions, not violations**
 — naming the tree or the credentials file *is* the rule text
 ("`include/local-secrets.h` holds credentials only", "don't modify
 `include/generated/`") and must stay. Extend the allowlist rather than removing
