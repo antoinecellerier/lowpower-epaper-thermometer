@@ -16,14 +16,15 @@
 ## Where the project is
 
 **rev A is in hand and working**: ordered 2026-07-20
-(`archive/order-2026-07-20/`); board 1 passed Phases 0–2 on 2026-07-29.
-**Current phase: `BRINGUP.md` Phase 3** + the quick sweep on boards 2–4.
+(`archive/order-2026-07-20/`), first article passed 2026-07-29, boards 1, 2 and
+4 off soak since 2026-08-23. **Current phase: `BRINGUP.md` Phase 3, open items.**
 
 | Doc | For |
 |---|---|
 | `README.md` | design rationale, pin map, jumper tables, bench procedures — read first for anything electrical |
-| `BRINGUP.md` | **the current phase** |
+| `BRINGUP.md` | **the bench queue and board state**; the closed first article is `archive/bringup-rev-a-first-article.md` |
 | `ORDERING.md` | fab/assembly decisions and the JLCPCB order walk |
+| `REV-B.md` | rev B proposal register: gate / expected / observed per candidate |
 | `HAND-ROUTING.md` | the GUI → generator harvest loop |
 | `EE-PRIMER.md`, `SCHEMATIC-VERIFICATION.md`, `REVIEW-KICAD-HAPPY.md` | background and review records |
 | `LAYOUT-PLAN.md`, `ROUTER-NOTES.md`, `PATHFINDER-NOTES.md` | **completed phases — historical** |
