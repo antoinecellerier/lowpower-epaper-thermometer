@@ -178,53 +178,39 @@ BOOT
 
 # Seeed ePaper Driver Board for XIAO vs DESPI-C02 (compatibility notes)
 
-Researched 2026-07-04. The Seeed board
-([wiki](https://wiki.seeedstudio.com/xiao_eink_expansion_board_v2/), schematic in
-`hardware/Seeed ePaper Driver Board for XIAO SCH v1.0.pdf`) is a faithful copy of
-Good Display's reference booster, so Good Display panels are what it's implicitly
-built for (Seeed's own panels are rebranded GD units).
+Researched 2026-07-04 from the Seeed
+[wiki](https://wiki.seeedstudio.com/xiao_eink_expansion_board_v2/), its schematic
+(`hardware/Seeed ePaper Driver Board for XIAO SCH v1.0.pdf`) and the DESPI-C02
+spec (`hardware/DESPI-C02 Connector Board for E-paper Display V1.1.pdf`). The
+Seeed board copies Good Display's reference booster; Seeed's own panels are
+rebranded GD units.
 
-**Identical to DESPI-C02:** 24-pin 0.5mm FPC with the standard Good Display
-pinout, 3.3V logic/supply, same boost circuit down to the recommended parts
-(10µH inductor, Si1304BDL MOSFET, MBR0530-class Schottkys — B0540WS on the
-Seeed board, 4.7µF/50V boost cap).
+| | DESPI-C02 | Seeed ePaper Driver Board |
+|---|---|---|
+| Panel connector | 24-pin 0.5mm FPC, standard Good Display pinout | identical |
+| Logic and supply | 3.3V | identical |
+| Boost circuit | 10µH inductor, Si1304BDL MOSFET, MBR0530-class Schottkys, 4.7µF/50V cap | identical parts; B0540WS Schottkys |
+| RESE | 0.47Ω / 3Ω select switch | fixed 0.47Ω (R2, no alternate footprint) |
+| Power gate | needed: ~534µA ungated | none, and none needed: ungated standby adds ~9.3µA over the DESPI-gated baseline |
+| Battery path | none | ETA9740 charger (0.5A) + JST-PH + power switch; do not use, see below |
+| Pin mapping | free-form | fixed, table below |
 
-**The one real difference — RESE:** DESPI-C02 has a 0.47Ω/3Ω select switch;
-the Seeed board has a **fixed 0.47Ω** (R2, no alternate footprint). Good
-Display warns a wrong RESE "will cause the e-paper cannot be refreshed"
-(in practice a 3Ω panel on 0.47Ω often still refreshes, but with a stressed
-booster / degraded image — out of spec). Per the DESPI-C02 spec
-(`hardware/DESPI-C02 Connector Board for E-paper Display V1.1.pdf`):
-
-- **0.47Ω (fine on Seeed board):** GDEW/GDEY series (UC81xx-driven), most
-  newer panels, four-color panels — e.g. GDEW042T2, GDEW075T7
-- **3Ω (mismatched on Seeed board):** mostly older GDEH/GDEM SSD16xx panels —
-  GDEH0154D67, GDEH0213B73, GDEH029A1 — plus oddballs GDEW0583T7, GDEW075T8
-
-Naming is not a reliable guide (two GDEW panels need 3Ω) — check the
-panel datasheet's peripheral/reference circuit page for the RESE value
-before plugging in.
-
-Our panels, against that fixed 0.47Ω:
+Good Display warns a wrong RESE "will cause the e-paper cannot be refreshed"; in
+practice a 3Ω panel on 0.47Ω often still refreshes, out of spec, with a stressed
+booster and a degraded image. Per the DESPI-C02 spec, 0.47Ω suits GDEW/GDEY
+(UC81xx), most newer panels and four-color panels, e.g. GDEW042T2, GDEW075T7; 3Ω
+suits mostly older GDEH/GDEM SSD16xx panels (GDEH0154D67, GDEH0213B73,
+GDEH029A1) plus the oddballs GDEW0583T7 and GDEW075T8. Naming is not a reliable
+guide (two GDEW panels need 3Ω): read the RESE value off the panel datasheet's
+reference circuit before plugging in.
 
 | Panel | Wants | On the Seeed board |
 |---|---|---|
-| GDEW029I6FD | 0.47Ω | fine — verified working 2026-07-05, first flash |
+| GDEW029I6FD | 0.47Ω | fine, verified working 2026-07-05, first flash |
 | GDEH0154Z90 | 3Ω (GDEH/SSD1681) | mismatched |
 | GDEH0576T81 | 2.2Ω + 47µH inductor | out of spec (board is 0.47Ω + 10µH), untested |
 
-**Don't use the JST battery connector.** The board carries an ETA9740 charger
-(0.5A) + JST-PH + power switch, and that path was measured and ruled out —
-solder the cell to the XIAO's underside BAT pads instead, leave the JST empty
-and the switch off (`docs/notes.md`, 2026-07-05). The switch does **not**
-isolate the ETA9740 from VDD_5V: its OUT pin is hardwired to the XIAO 5V pin,
-so the IC powers up whenever USB is plugged in, whatever the switch position.
-
-The board has no power gate (3V3 is hardwired to the booster and FPC), unlike
-the DESPI-C02 which needs one. Measured, it doesn't want one either — its
-ungated standby is single-digit µA, not the DESPI's ~534µA.
-
-**Fixed pin mapping** (firmware must match; DESPI-C02 wiring is free-form):
+Fixed pin mapping (firmware must match):
 
 | Signal | XIAO pin |
 |--------|----------|
@@ -235,38 +221,37 @@ ungated standby is single-digit µA, not the DESPI's ~534µA.
 | SCK    | D8       |
 | MOSI   | D10      |
 
-This takes D0/D1, which the C6 battery divider above uses. Nothing ADC-capable
-is left on the header — but the **underside pads are**: C6 ADC1 covers
-GPIO0–6, so MTMS (GPIO4, ADC1_CH4) and MTDI (GPIO5, ADC1_CH5) are both free
-here, since LP I2C sits on the other two pads (MTCK/MTDO = GPIO6/7).
+Three rules:
 
-So a battery divider is still possible on this board: sense on the MTDI pad,
-AO3400A gate on D4 or D5 (free header pins), wired as the 100k/100k
-GPIO-switched divider above. Not built. Firmware thresholds are board-split in
-`Thermometer.cpp`; the XIAO's are 3800/3700 mV, finalised by the 2026-07-05
-fine sweep — 3.7V is the lowest verified-healthy point and 3.6V is already
-inside the buck's sag band.
+- **Do not use the JST battery connector.** The ETA9740 path idles at ~330-500µA,
+  ~20× the rest of the system, and the switch does not isolate it: its OUT pin is
+  hardwired to the XIAO 5V pin, so the IC powers up whenever USB is plugged in.
+  Solder the cell to the XIAO's underside BAT pads, JST empty, switch off
+  ([notes.md, battery path via the shield JST](notes.md#seeed-xiao-epaper-driver-board-battery-path-via-the-shield-jst-2026-07-05)).
+- **No power gate.** 3V3 is hardwired to the booster and FPC; the ungated
+  standby measures ~25.1µA, +9.3µA over the DESPI-gated baseline, against the
+  DESPI-C02's ~534µA ungated
+  ([notes.md, rail-fed floor](notes.md#seeed-xiao-epaper-driver-board-rail-fed-floor-and-refresh-2026-07-05)).
+- **A battery divider is still possible, not built.** The mapping takes D0/D1
+  and leaves nothing ADC-capable on the header, but the underside pads MTMS
+  (GPIO4, ADC1_CH4) and MTDI (GPIO5, ADC1_CH5) are free, LP I2C being on MTCK/MTDO
+  (GPIO6/7). Sense on MTDI, AO3400A gate on D4 or D5, the 100k/100k divider above.
+  XIAO thresholds in `Thermometer.cpp` are 3800/3700 mV from the 2026-07-05 fine
+  sweep: 3.7V is the lowest verified-healthy point, 3.6V is inside the sag band.
 
-## What was measured on this board
+The 2026-07-04 verification list is closed. Every measurement on this board is in
+`notes.md`, 2026-07-05, source voltage recorded per figure:
+[ungated standby](notes.md#seeed-xiao-epaper-driver-board-rail-fed-floor-and-refresh-2026-07-05),
+[JST path](notes.md#seeed-xiao-epaper-driver-board-battery-path-via-the-shield-jst-2026-07-05),
+[BAT-pads sweep](notes.md#xiao-c6-battery-direct-on-the-bat-pads-voltage-sweep-2026-07-05),
+[buck regime map](notes.md#xiao-c6-buck-sag-mechanism-and-shutdown-thresholds-2026-07-05). Compare in mJ, not mC: the three configs meter
+at different node voltages. The buck's usable window ends around 3.6-3.7V, a
+firmware threshold rather than a wiring choice; below it wakes collapse into
+brownout storms.
 
-The 2026-07-04 verification list is closed. All of it — the ETA9740 JST path,
-the battery-direct BAT-pads sweep and its buck-dropout regime map, the ungated
-booster standby, and the three-way rail/JST/BAT-pads comparison — is in
-[`docs/notes.md`](notes.md), 2026-07-05, with the source voltage recorded per
-figure. The conclusions that change how you wire the thing are already above.
-
-Two cautions from it worth carrying here:
-
-- **Compare in mJ, not mC.** These three configs meter at different node
-  voltages, so charge alone makes the wrong one look cheapest.
-- **The buck's usable window ends around 3.6–3.7V**, which is a firmware
-  threshold, not a wiring choice. Below it the XIAO's rail sags and wakes
-  collapse into brownout storms.
-
-Still open, both on the custom board rather than this one: a cold (~0°C) run
-and a refresh on a real cell, which together decide the final shutdown
-threshold — [`hardware/thermometer-c6/BRINGUP.md`](../hardware/thermometer-c6/BRINGUP.md)
-Phase 3.
+Still open, on the custom board rather than this one: a cold (~0°C) run and a
+refresh on a real cell, which together decide the final shutdown threshold
+([BRINGUP.md](../hardware/thermometer-c6/BRINGUP.md) Phase 3).
 
 ![Seeed Xiao C6, e-Paper Driver Board, BMP581 & GDEW029I6FD (2026)](photos/seeed-xiao-c6-bmp581-epaperhat-GDEW029I6FD-prototype.jpg)
 
