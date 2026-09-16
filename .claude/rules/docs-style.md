@@ -3,6 +3,7 @@ paths:
   - "docs/*.md"
   - "docs/**/*.md"
   - "readme.md"
+  - "hardware/**/*.md"
 ---
 
 # Logbook and research-doc style
@@ -75,5 +76,11 @@ Prose may be rewritten around unchanged data. Gate it with `tools/docs/docinv.py
 | `captures/`, `photos/` | every PPK2 screenshot and photo; cite by relative path so the link opens |
 | `README.md` | index, one row per doc with a status; a new doc adds its row |
 | `archive/` | finished or abandoned work, moved here with a banner stating the outcome; never deleted |
+| `hardware/thermometer-c6/README.md` | board reference; opens with the doc table (one row per doc with a status), a new doc adds its row |
+| `hardware/thermometer-c6/BRINGUP.md` | the live bench queue and per-board state; a closed phase moves to `thermometer-c6/archive/` |
+| `hardware/thermometer-c6/archive/` | routing snapshots, orders, closed bring-up phases; an order directory describes boards that exist and is append-only |
+| `hardware/datasheets/` | vendor PDFs for every panel and carrier, and the panel readback findings |
 
 `readme.md` gets a one-line pointer to the logbook, never the finding.
+A hardware doc carries board state and links the logbook entry that holds the
+measured figure; it does not restate the figure.

@@ -3,8 +3,9 @@
 
   docs/docstats.py FILE...                    -> current working-tree figures
   docs/docstats.py -b REV [-c REV] FILE...    -> REV -> REV (default second REV: working tree)
-  docs/docstats.py --tree [-b REV] [-c REV]   -> docs/ layout: files in root and archive/,
-                                                 loose images, docs with no inbound link
+  docs/docstats.py --tree [DIR] [-b REV] [-c REV] -> layout of DIR (default docs/): md files
+                                                 outside and inside archive/, loose images,
+                                                 docs with no inbound link
 
 Per file: lines, KB, prose words, words per sentence, dash-as-parenthesis asides
 (" — "), table cells over 200 characters. Prose excludes tables, headings, code
@@ -51,27 +52,30 @@ def ls(rev, path):
         r = subprocess.run(['git', 'ls-tree', '-r', '--name-only', rev, path], capture_output=True, text=True)
     return [x for x in r.stdout.split('\n') if x]
 
-def tree(rev):
-    files = ls(rev, 'docs/')
-    root_md = [f for f in files if f.count('/') == 1 and f.endswith('.md')]
-    arch_md = [f for f in files if f.startswith('docs/archive/') and f.endswith('.md')]
-    root_img = [f for f in files if f.count('/') == 1 and re.search(r'\.(png|jpg)$', f)]
+def tree(rev, root):
+    root = root.rstrip('/') + '/'
+    files = [f for f in ls(rev, root) if '/.claude/' not in f]
+    md = [f for f in files if f.endswith('.md')]
+    arch_md = [f for f in md if '/archive/' in f]
+    root_md = [f for f in md if f not in arch_md]
+    loose_img = [f for f in files if re.search(r'\.(png|jpg)$', f)
+                 and not re.search(r'/(archive|captures|photos)/', f)]
     orphans = 0
-    for f in root_md + arch_md:
+    for f in md:
         if f.endswith('README.md'): continue
         base = f.rsplit('/', 1)[1]
-        cmd = ['git', 'grep', '-l', '-F', base] + ([rev] if rev else []) + ['--', ':!hardware', f':!{f}']
+        cmd = ['git', 'grep', '-l', '-F', base] + ([rev] if rev else []) + ['--', f':!{f}']
         if not subprocess.run(cmd, capture_output=True, text=True).stdout.strip(): orphans += 1
-    return dict(root_md=len(root_md), archive_md=len(arch_md), root_images=len(root_img), no_inbound_link=orphans)
+    return dict(md=len(root_md), archive_md=len(arch_md), loose_images=len(loose_img), no_inbound_link=orphans)
 
 def main():
     ap = argparse.ArgumentParser(add_help=False)
-    ap.add_argument('-b', '--base'); ap.add_argument('-c', '--compare'); ap.add_argument('--tree', action='store_true')
+    ap.add_argument('-b', '--base'); ap.add_argument('-c', '--compare'); ap.add_argument('--tree', nargs='?', const='docs/')
     ap.add_argument('files', nargs='*')
     a = ap.parse_args()
     if not a.files and not a.tree: print(__doc__); sys.exit(2)
     if a.tree:
-        before = tree(a.base) if a.base else None; after = tree(a.compare)
+        before = tree(a.base, a.tree) if a.base else None; after = tree(a.compare, a.tree)
         for k, v in after.items():
             print(f'{k:18s} {cell(before[k], v, "{:d}") if before else v}')
         if not a.files: return
