@@ -25,29 +25,25 @@ charging, LDO power tree. Design driven by the PPK2 measurement campaign in
 | [archive/bringup-rev-a-first-article.md](archive/bringup-rev-a-first-article.md) | Rev A first article on board 1, Phases 0–2 and the Phase 3 items closed since | record |
 | [../datasheets/](../datasheets/README.md) | Panel and carrier vendor PDFs, panel readback findings | reference |
 
-**Status: rev A built and working.** Ordered 2026-07-20
-([`archive/order-2026-07-20/`](archive/order-2026-07-20/); landed €273.93 ≈
-€68.50/assembled board, breakdown in [`ORDERING.md`](ORDERING.md)). Board 1
-passed bring-up Phases 0–2 on 2026-07-29 ([`BRINGUP.md`](BRINGUP.md)): first
-render, LP-core survival, and a measured 18.3µA @ 4.2V deployment-path sleep
-floor over a full field interval (docs/notes.md 2026-07-29) — vs 21.7µA at
-the same 4.2V on the XIAO buck rig, validating the LDO tree. **Phase 3 is under
-way on board 2, not board 1**: the GDEH0576T81 panels arrived 2026-08-11 and
-board 2 took one plus a battery, so the phase is no longer gated on board 1
-leaving its soak (still running since 2026-07-31; harvest before resetting it).
-Closed on board 2 that day: the deployment configuration's power figures
-(19.05µA floor, 36.77mC wake+refresh `@4V2 bat`), the boost rails under the
-heaviest waveform the panel can be given (no sag — this is the evidence the
-rev B bridge deletion was waiting on), the VBAT_ADC point (−24mV at 4.2V, 2mV
-from board 1), the battery-floor sweep, and the WiFi resync charges. Board 2
-went straight to flash on the strength of board 1's pass, worked first time,
-and is both the bench board and now the Phase 3 vehicle; boards 3–4 are still
-in the bag. The board is 48×35mm
-2-layer, hand-routed, DRC-clean at full severity; fab export is `make fab`
-(gerbers/drill + CPL/BOM zip, git-hash+date stamped, gated by
-`verify/check_fab.py`); pre-order schematic sign-off (requirements proven
-against primary sources, findings + dispositions):
-[`SCHEMATIC-VERIFICATION.md`](SCHEMATIC-VERIFICATION.md).
+Status: rev A built and working. Ordered 2026-07-20
+([`archive/order-2026-07-20/`](archive/order-2026-07-20/)), landed at €273.93,
+about €68.50 per assembled board ([`ORDERING.md`](ORDERING.md) §8). Where each
+board is now: [`BRINGUP.md`](BRINGUP.md#boards-as-of-2026-08-23). Board 1
+passed Phases 0–2 on 2026-07-29
+([`archive/bringup-rev-a-first-article.md`](archive/bringup-rev-a-first-article.md)).
+The deployment configuration is board 2 with a GDEH0576T81, fitted 2026-08-11;
+its **19.05µA** sleep floor and 36.77mC per wake and refresh `@4V2 bat` are in
+[`docs/notes.md`](../../docs/notes.md#budget-as-measured-2026-08-11-thermometer-c6-board-2--t81-the-deployment-config).
+Board 1's 18.3µA deployment-path sleep floor at 4.2V over a full field
+interval
+([notes.md 2026-07-29](../../docs/notes.md#budget-as-measured-2026-07-29-thermometer-c6-board-1)),
+against 21.7µA on the XIAO buck rig at the same voltage
+([results table](../../docs/notes.md#results)), is the measurement that
+validated the LDO tree. The board is 48×35mm, 2-layer, hand-routed and
+DRC-clean at full severity. Fab export is `make fab` (gerbers/drill + CPL/BOM
+zip, git-hash+date stamped, gated by `verify/check_fab.py`). Pre-order
+schematic sign-off, requirements proven against primary sources, findings with
+dispositions: [`SCHEMATIC-VERIFICATION.md`](SCHEMATIC-VERIFICATION.md).
 
 ## Why these choices (measurement rationale)
 
@@ -187,73 +183,82 @@ BMP58x temperature (belt and braces; it cannot stop the charger).
 - BMP58x INT pins are unconnected: firmware must configure int_en=1,
   int_od=0, pad_int_drv=0 per the Bosch datasheets.
 - Battery thresholds are board-scoped in Thermometer.cpp: **3550 warn /
-  3500mV shutdown** (applied 2026-07-31 from the sweep + BOD-probe
-  measurements, notes.md 2026-07-30 — droop at the refresh peak ≈300mV, so
-  3500 keeps ~200mV of rail margin over the C6's 3.0V spec floor). That
-  recovers most of the ~25% of pack capacity the buck-era 3700mV cutoff
-  stranded; the cold and real-cell BOD-probe runs decide whether 3450
-  (~5-8% more, OCV estimate) is safe.
-- The first-article measurement list lives in [`BRINGUP.md`](BRINGUP.md)
-  Phase 3 (VGH/VGL spec at refresh, EPD_VCC soft-start ramp, 3V3 sag →
-  threshold re-derivation, boost ILIM transient, 32k crystal cold start,
-  SS14 warm-floor leakage, VBAT_ADC sweep, charging self-heat). The 32k crystal
-  is proven running warm on board 1 (no RTC fallback warning); cold start
-  remains open.
+  3500mV shutdown**, applied 2026-07-31 from the sweep and BOD-probe
+  measurements
+  ([notes.md 2026-07-30](../../docs/notes.md#thermometer-c6-board-1-bod-probe-at-sel_2-3v3-droop-at-the-refresh-peak-2026-07-30)).
+  Droop at the refresh peak is ≈300mV, so 3500 keeps ~200mV of rail margin
+  over the C6's 3.0V spec floor. That recovers most of the ~25% of pack
+  capacity the buck-era 3700mV cutoff stranded; the cold and real-cell
+  BOD-probe runs decide whether 3450 (~5-8% more, OCV estimate) is safe.
+- Open first-article measurements: [`BRINGUP.md`](BRINGUP.md) Phase 3. The
+  32k crystal is proven running warm on board 1 (no RTC fallback warning);
+  cold start is still open there.
 - While charging, the board self-heats slightly — BMP581 temperature reads
   high until it cools; log accordingly.
 
 ## BOM
 
 Generated at `bom/thermometer-c6-bom.csv` (JLCPCB columns) from circuit.py.
-Notable parts: ESP32-C6-MINI-1-N4 (C5736265), RT9080-33GJ5 (C841192),
-MCP73831-2 (C424093), Si1308EDL (C469327, low stock — fallback Si1304BDL
-clone C7419947), MBR0530 TWGMC (C5204746), FPC-05FB-24PH20 dual-contact
-(C2856831), SWPA4030S100MT (C38117), FC-135 (C32346), BMP581 (C5362283 —
-**restocked at LCSC as of 2026-07-17** (3,675 pcs); the fab BOM populates
-U5 by default. Re-verify stock at order time like everything else).
+Re-verify stock at order time for every line. Notable parts:
+
+| Part | LCSC | Note |
+|---|---|---|
+| ESP32-C6-MINI-1-N4 | C5736265 | |
+| RT9080-33GJ5 | C841192 | |
+| MCP73831-2 | C424093 | |
+| Si1308EDL | C469327 | low stock; fallback Si1304BDL clone C7419947 |
+| MBR0530 TWGMC | C5204746 | |
+| FPC-05FB-24PH20 dual-contact | C2856831 | the bottom-contact-only FPC-05F-24PH20 C2856805 must NOT be substituted |
+| SWPA4030S100MT | C38117 | |
+| FC-135 | C32346 | |
+| BMP581 | C5362283 | restocked at LCSC as of 2026-07-17 (3,675 pcs); the fab BOM populates U5 by default |
+
+### FPC socket, a measured requirement
 
 DESPI-C02 §4.5 requires an FPC socket with "contact at up side or both
-side" — hence the dual-contact FPC-05FB (the bottom-contact-only
-FPC-05F-24PH20 C2856805 must NOT be substituted). **Rev B anti-regression
-note — this became a measured requirement on 2026-08-11, not a paper one.**
-The GDEH0576T81's FPC carries its contacts on the REAR face (away from the
-screen); every other panel bench-tested here — GDEM0154I61, GDEY0213M21,
-GDEH0154Z90, GDEW029I6FD — has them on the FRONT. A single-side socket would
-therefore have worked on every panel used during bring-up and failed on the
-one panel this board is being built for. It is exactly the line item a
-cost-down pass reads as unnecessary margin; it is not. J4 uses the hand-drawn
-`local:XUNPU_FPC-05FB-24PH20` footprint, transcribed from the XUNPU
-FPC-05FB-NPH20 manufacture drawing (pads 0.3×1.2 @0.5mm, tabs 2.0×1.8 at
-±7.3/+1.625 center-to-center) and cross-checked against the EasyEDA/JLC
-C2856831 land pattern — the two agree exactly. The FPC-05FB is a rear-flip
-connector: the SMT contact tails / pad row sit at the REAR (actuator) face,
-and the mouth / cable entry is on the far side, 4.95mm from the pad centers
-(body depth 5.40 = the XUNPU drawing; VERTEX_POINT-only STEP bbox,
-`out/j3-land/` §7 2026-07-20 — the earlier 6.55 came from bounding-boxing
-raw CARTESIAN_POINTs, which include LINE/AXIS2_PLACEMENT_3D entities that
-own no geometry). On the board J4 is placed at rot 90 with the tail/pad
-column WEST (x41.45) and the mouth EAST at x46.40, so the panel cable
-approaches from the east edge. The mouth sits 1.60mm inboard of the edge
-rather than flush — harmless for an FPC (the cable bottoms out inside the
-housing either way) and it leaves the body fully supported. Pad 1 = panel circuit 1 sits at the NORTH end (the footprint pads are
-numbered to keep pin 1 north despite the rear-flip geometry; the pin-1 silk
-dot marks it). Pin-1 direction is verified against the DESPI-C02 manual
-photos (P1 silk: "1" and "24" end markers, "24" at the P1-refdes end); note
-the DESPI "P1" silk next to the pin-24 marker is the connector refdes, not
-pin 1.
+side", hence the dual-contact FPC-05FB. This became a measured requirement on
+2026-08-11, not a paper one. The GDEH0576T81's FPC carries its contacts on the
+REAR face (away from the screen); every other panel bench-tested here
+(GDEM0154I61, GDEY0213M21, GDEH0154Z90, GDEW029I6FD) has them on the FRONT. A
+single-side socket would have worked on every panel used during bring-up and
+failed on the one panel this board is built for. This line item is a requirement,
+not margin.
+
+### J4 footprint and datum
+
+- J4 uses the hand-drawn `local:XUNPU_FPC-05FB-24PH20` footprint, transcribed
+  from the XUNPU FPC-05FB-NPH20 manufacture drawing: pads 0.3×1.2 @0.5mm, tabs
+  2.0×1.8 at ±7.3/+1.625 center-to-center. It agrees exactly with the
+  EasyEDA/JLC C2856831 land pattern.
+- The FPC-05FB is a rear-flip connector. The SMT contact tails and pad row sit
+  at the REAR (actuator) face; the mouth and cable entry are on the far side,
+  4.95mm from the pad centers. Body depth is 5.40 per the XUNPU drawing and a
+  VERTEX_POINT-only STEP bbox (`out/j3-land/` §7, 2026-07-20). The earlier
+  6.55 came from bounding-boxing raw CARTESIAN_POINTs, which include
+  LINE/AXIS2_PLACEMENT_3D entities that own no geometry.
+- On the board J4 is placed at rot 90 with the tail/pad column WEST (x41.45)
+  and the mouth EAST at x46.40, so the panel cable approaches from the east
+  edge. The mouth sits 1.60mm inboard of the edge rather than flush. That is
+  harmless for an FPC, since the cable bottoms out inside the housing either
+  way, and it leaves the body fully supported.
+- Pad 1 = panel circuit 1 sits at the NORTH end. The footprint pads are
+  numbered to keep pin 1 north despite the rear-flip geometry, and the pin-1
+  silk dot marks it. Pin-1 direction is verified against the DESPI-C02 manual
+  photos (P1 silk: "1" and "24" end markers, "24" at the P1-refdes end). The
+  DESPI "P1" silk next to the pin-24 marker is the connector refdes, not
+  pin 1.
 
 ## Alternate sensor: BMP585 (U6, DNP by default)
 
-The board carries footprints for BOTH BMP581 (U5, LGA-10 2×2) and BMP585
-(U6, LGA-9 3.25×3.25, media-resistant — suitable for outdoor/weather-exposed
-builds; gel-protected port under the metal lid, keep the Ø2.2mm opening
-unobstructed in the enclosure). Same LP I2C bus, same 0x47 strapping
-(CSB+SDO→VDDIO), same register map — the firmware BMP58x driver reads the
-chip-ID (0x50=581, 0x51=585) and works with either unchanged.
-**Populate exactly one**: both strap to address 0x47.
-BMP585 = LCSC C18184976. Its datasheet
-requires a 10Ω supply series resistor only for supply ramps <10µs — not
-applicable here (always-on 3V3 rail, never GPIO-gated).
+The board carries footprints for BOTH BMP581 (U5, LGA-10 2×2) and BMP585 (U6,
+LGA-9 3.25×3.25, media-resistant — suitable for outdoor/weather-exposed builds;
+gel-protected port under the metal lid, keep the Ø2.2mm opening unobstructed in
+the enclosure). Same LP I2C bus, same 0x47 strapping (CSB+SDO→VDDIO), same
+register map — the firmware BMP58x driver reads the chip-ID (0x50=581, 0x51=585)
+and works with either unchanged. **Populate exactly one**: both strap to address
+0x47. BMP585 = LCSC C18184976. Its datasheet requires a 10Ω supply series
+resistor only for supply ramps <10µs — not applicable here (always-on 3V3 rail,
+never GPIO-gated).
 
 ## Regenerating
 
@@ -269,63 +274,25 @@ verified three ways: generator geometric checks (cross-net coincidence =
 build error), `kicad-cli` ERC at zero tolerance, and exact netlist matching
 against circuit.py (anonymous `~` nets matched by pin set).
 
-## Open items (user sign-off) — all dispositioned
+## Closed items
 
-1. **BMP581 sourcing** — RESOLVED 2026-07-17: restocked at LCSC (3,675
-   pcs); the ordered boards populate U5 BMP581. The BMP585 (C18184976)
-   remains the U6 populate-one alternate (outdoor/media-resistant builds,
-   or if the 581 dries up again).
-2. **Si1308EDL stock thin** — RESOLVED by the order: C469327 is on the
-   boards; the fallback Si1304BDL-clone C7419947 was never needed.
-3. **Reverse-polarity protection** — RESOLVED: Q6 AO3401A P-FET at the
-   JST is fitted (see "Why these choices"); a reversed cell is blocked,
-   MCP73831's −0.3V abs-max is respected. Proven on board 1: body diode
-   0.4259V diode-mode pass ([`BRINGUP.md`](BRINGUP.md) Phase 0). Keyed JST
-   + silk remain the first line of defense.
-4. **EPD SPI/control series resistors omitted** — CLOSED by construction,
-   no veto: boards fabbed without them, firmware floats the pins when the
-   panel is gated off (src/Display.cpp), first render passed on board 1.
-   Disposition recorded in [`SCHEMATIC-VERIFICATION.md`](SCHEMATIC-VERIFICATION.md).
-5. **JST-PH polarity** — RESOLVED 2026-07-29 on hardware: DMM on the loose
-   plug, red wire / + contact mates with J1's `+`-marked pad
-   ([`BRINGUP.md`](BRINGUP.md) Phase 0). JST vs Adafruit convention still
-   differs — re-check any new pigtail.
-6. **FPC footprint** — DONE and hardware-verified: hand-drawn
-   `local:XUNPU_FPC-05FB-24PH20` (see BOM section), respun 2026-07-19
-   after a numeric STEP proof (`out/j4-proof/`), body depth corrected to
-   5.40 on 2026-07-20. Placement verified pre-order (75/75 placements,
-   [`archive/order-2026-07-20/`](archive/order-2026-07-20/)); J4 pin-1 north
-   / mouth-east confirmed by continuity on board 1
-   ([`BRINGUP.md`](BRINGUP.md) Phase 0).
-7. **32k crystal populated by default** — CONFIRMED: on the ordered boards
-   and proven oscillating on board 1 (no RTC fallback warning in the boot
-   log); cold start remains a [`BRINGUP.md`](BRINGUP.md) Phase 3 item.
-8. **Old Copilot draft** — MOOT as originally written: `hardware/kicad/`
-   was never merged and exists only on the unmerged branch
-   `hardware/custom-esp32c6-pcb`. Nothing in the tree to delete; the
-   remaining call is whether to delete that branch.
+Sign-off items and follow-up phases, all dispositioned. The bench queue is
+[`BRINGUP.md`](BRINGUP.md).
 
-## Follow-up phases
-
-- PCB layout (2-layer) — **DONE**: booster switch loop tight, RESE sense
-  short, no-copper zone under BMP581, antenna keep-out per Espressif HDG,
-  JLCPCB gerbers/drill + CPL/BOM via `make fab` (order per
-  [`ORDERING.md`](ORDERING.md)).
-- Firmware — **DONE**: `THERMOMETER_C6_BOARD` variant (`thermometer_c6_*`
-  envs in platformio.ini): EPD on GPIO18–23 + gate GPIO14 with float-on-off,
-  battery divider GPIO2/3, VBUS sense GPIO4 (suppresses SoC shutdown on USB),
-  LED GPIO15, 32k crystal via `sdkconfig.defaults.thermometer_c6`.
-- Fab order — **DONE** (2026-07-20,
-  [`archive/order-2026-07-20/`](archive/order-2026-07-20/); landed cost
-  breakdown in [`ORDERING.md`](ORDERING.md) §8).
-- Bring-up Phases 0–2 — **DONE** on board 1 (2026-07-29,
-  [`BRINGUP.md`](BRINGUP.md)); measured numbers in the
-  [`docs/notes.md`](../../docs/notes.md) power logbook.
-- **NEXT** (hardware): [`BRINGUP.md`](BRINGUP.md) Phase 3 first-article
-  measurements. Board 1 has been on battery soak since 2026-07-31 and most of
-  Phase 3 waits on it. Boards 3–4 need bringing up, but not the full Phase 0–1
-  checklist — board 2 skipped it and worked; only board 4's flagged U5 skew
-  wants the Phase 2 sensor detect run early.
+| Item | Disposition | Date |
+|---|---|---|
+| BMP581 sourcing | Restocked at LCSC (3,675 pcs); the ordered boards populate U5 BMP581. The BMP585 (C18184976) remains the U6 populate-one alternate for outdoor/media-resistant builds, or if the 581 dries up again | 2026-07-17 |
+| Si1308EDL stock thin | Resolved by the order: C469327 is on the boards; the fallback Si1304BDL clone C7419947 was never needed | — |
+| Reverse-polarity protection | Q6 AO3401A P-FET at the JST is fitted ("Why these choices"); a reversed cell is blocked, MCP73831's −0.3V abs-max is respected. Body diode 0.4259V diode-mode pass on board 1 ([archive record](archive/bringup-rev-a-first-article.md), Phase 0). Keyed JST + silk remain the first line of defense | — |
+| EPD SPI/control series resistors omitted | Closed by construction, no veto: boards fabbed without them, firmware floats the pins when the panel is gated off (src/Display.cpp), first render passed on board 1. Disposition in [`SCHEMATIC-VERIFICATION.md`](SCHEMATIC-VERIFICATION.md) | — |
+| JST-PH polarity | DMM on the loose plug: red wire / + contact mates with J1's `+`-marked pad ([archive record](archive/bringup-rev-a-first-article.md), Phase 0). JST vs Adafruit convention still differs; re-check any new pigtail | 2026-07-29 |
+| FPC footprint | Hand-drawn `local:XUNPU_FPC-05FB-24PH20` (BOM section), respun 2026-07-19 after a numeric STEP proof (`out/j4-proof/`), body depth corrected to 5.40 on 2026-07-20. Placement verified pre-order (75/75 placements, [`archive/order-2026-07-20/`](archive/order-2026-07-20/)); J4 pin-1 north / mouth-east confirmed by continuity on board 1 ([archive record](archive/bringup-rev-a-first-article.md), Phase 0) | — |
+| 32k crystal populated by default | On the ordered boards and oscillating on board 1 (no RTC fallback warning in the boot log); cold start is a [`BRINGUP.md`](BRINGUP.md) Phase 3 item | — |
+| Old Copilot draft | `hardware/kicad/` was never merged and exists only on the unmerged branch `hardware/custom-esp32c6-pcb`. Nothing in the tree to delete; whether to delete that branch is still open | — |
+| PCB layout (2-layer) | Booster switch loop tight, RESE sense short, no-copper zone under BMP581, antenna keep-out per Espressif HDG; JLCPCB gerbers/drill + CPL/BOM via `make fab`, order per [`ORDERING.md`](ORDERING.md) | — |
+| Firmware | `THERMOMETER_C6_BOARD` variant (`thermometer_c6_*` envs in platformio.ini): EPD on GPIO18–23 + gate GPIO14 with float-on-off, battery divider GPIO2/3, VBUS sense GPIO4 (suppresses SoC shutdown on USB), LED GPIO15, 32k crystal via `sdkconfig.defaults.thermometer_c6` | — |
+| Fab order | [`archive/order-2026-07-20/`](archive/order-2026-07-20/); landed cost breakdown in [`ORDERING.md`](ORDERING.md) §8 | 2026-07-20 |
+| Bring-up Phases 0–2 | Done on board 1 ([archive record](archive/bringup-rev-a-first-article.md)); measured numbers in the [`docs/notes.md`](../../docs/notes.md) power logbook | 2026-07-29 |
 
 ## Routed-copper census (rev A final vs the pre-connector-fix board)
 
@@ -345,11 +312,9 @@ vias by region   FPC/east x>36  36 -> 27      USB/north y<9  51 -> 28
                  west x<20      84 -> 72
 ```
 
-Putting both connectors on their true datums made the board measurably
-simpler rather than merely correct: the USB/north region shed 45% of its vias
-and CHG_STAT/EPD_SCK/VBUS/VBAT each lost 12–19mm. Routing style is
-deliberately free-angle (≈48% of copper length off the 45/90 grid) — that is
-a choice, not drift.
+The USB/north region shed 45% of its vias; CHG_STAT, EPD_SCK, VBUS and VBAT
+each lost 12–19mm. About 48% of copper length is off the 45/90 grid:
+free-angle routing is the chosen style, not drift.
 
 ## Rev B candidates
 

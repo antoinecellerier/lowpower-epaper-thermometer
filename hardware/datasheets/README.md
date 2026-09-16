@@ -46,10 +46,19 @@ happens, is the controller driving that same pin back.
 
 An earlier version of this table called the T81 doubtful "because the FPC carries
 no SDO". That was wrong: `SSD1677.pdf` names `SDI`/`SDO` as separate **chip**
-pins in 4-wire mode, but the module bonds a single `SDA` to the FPC, exactly like
+pins in 4-wire mode, but the module bonds a single `SDA` to FPC pin 14, exactly like
 the other three. The T81's position is therefore identical to the M21's before it
 was probed — one data pin, a module datasheet that calls it an input and
 documents no read — and the M21 answered anyway. Untested, not unlikely.
+
+Probe detail, board 2 with a GDEY0213M21, 2026-08-05: only three registers
+answer, `0x70` REV → `01 0e`, `0x71` FLG → `13 13`, `0x40` temperature →
+`d2 00`, each byte identical whether the input was pulled up or down, so
+actively driven; foreign SSD168x commands floated, which is the control. The
+three answer identically before and after GxEPD2's init. `0x61` TRES and
+`0x00` PSR float, before init too, so resolution cannot be read back; the
+datasheet calls TRES a host-set override anyway. `LUT_REV` is the one
+panel-intrinsic value on offer, since a waveform LUT is tuned to its glass.
 
 `0x38` matters most: the SSD1681 drives *both* 200x200 panels (the Z90 and the
 GDEM0154I61 behind the GDEY0154D67 driver), so a User ID is the only thing that
@@ -90,7 +99,8 @@ candidates.
   on the T81's `SDA`. Check any pin attribute against the rendered page.
 - **The UC8151 framing is unresolved.** Reads give a stable `0x70` → `01 0e`,
   but the datasheet's `CHIP_REV` is `1101b`, and it notes OTP reads return a
-  dummy first packet. Usable as an opaque fingerprint; not as "the revision".
+  dummy first packet; bit alignment is the other candidate explanation. Usable
+  as an opaque fingerprint; not as "the revision".
 
 Firmware probe: `display_probe_readback()` in `src/Display.cpp`, behind
 `EPD_PROBE`. It reads every command twice, against a pulldown and a pullup — a

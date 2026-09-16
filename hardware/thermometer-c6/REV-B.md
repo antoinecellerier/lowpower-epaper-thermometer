@@ -30,44 +30,17 @@ of a board that is otherwise order-ready.
 
 ### Panel readback (SDO)
 
-Whether the panel can answer the host at all depends on its controller, not on
-this board, so there is no single answer to carry forward. **UC8151 works on the
-wiring as built**: probed 2026-08-05 on board 2 with a GDEY0213M21, `0x70` →
-`01 0e`, `0x71` → `13 13`, `0x40` → `d2 00`, each byte identical whether the
-input was pulled up or down (i.e. actively driven), while foreign SSD168x
-commands floated — that contrast is the control. **SSD2677 (the T81) is
-untested, and no longer "unlikely".** An earlier note here said it could not
-reply because the FPC carries no SDO. That was wrong: `SSD1677.pdf` names
-`SDI`/`SDO` as separate **chip** pins in 4-wire mode, but the T81 module bonds a
-single `SDA` to FPC pin 14 — exactly like every other panel here, none of which
-exposes an SDO either. Its module datasheet calls that pin an input and
-documents no read procedure, which was equally true of the M21 before the M21
-answered. **Probe a T81 before concluding anything.** **It has never been asked,
-only never listened to.** `_Init_Full` reads the controller temperature to pick
-a waveform LUT and gets 0, but GxEPD2's `_readData()` samples the line in
-software and works only in bit-banged mode, and this build runs hardware SPI —
-so no wiring conclusion follows from the 0. **This stopped being a board
-question on 2026-08-11.** The LUT consequence is fixed in firmware (upstream's
-guarded 20–30 °C fallback, then the BMP581 value fed in directly), and feeding a
-calibrated ambient reading beats any readback of a self-heating die — so neither
-3-wire mode (a 9-bit protocol GxEPD2's 4-wire path does not implement) nor an
-SDO on the FPC buys anything a rev B should pay for. A probe is now worth
-running for the cross-check alone: `display_probe_readback()` behind
-`EPD_PROBE`. **What is readable is narrow, and per-controller.** On the UC8151
-only three registers answer — `0x70` REV, `0x71` FLG, `0x40` temperature — and
-they answer identically before and after GxEPD2's init. `0x61` TRES and `0x00`
-PSR **float**, so resolution cannot be read back: the datasheet calls TRES a
-host-set override anyway, and probing before init confirmed it is not merely
-being overwritten. Resolution would in any case only ever **falsify** a match,
-never confirm one — two different 200x200 panels agree on it. The one
-panel-intrinsic value on offer is `0x70`'s `LUT_REV`, sourced from OTP address
-`0x001`, since a waveform LUT is tuned to its glass. Caveat before trusting it
-as an ID: our bytes (`01 0e`) do not match the datasheet's documented `CHIP_REV`
-of `1101b`, so the framing (a dummy first byte on OTP reads, or bit alignment)
-is unresolved — the values are stable and repeatable, so they serve as an opaque
-fingerprint, but should not be reported as "the chip revision" until that is
-settled. And nothing here transfers: an SSD168x command set floats entirely on a
-UC8151, so every panel family needs its own probe table.
+Whether a panel can answer the host depends on its controller, not on this
+board. The per-controller findings, the UC8151 probe on board 2 (2026-08-05)
+and the T81's untested position are in
+[`../datasheets/README.md`](../datasheets/README.md). What matters for a rev
+B: the LUT consequence of the T81's failed read is fixed in firmware since
+2026-08-11 (upstream's guarded 20–30 °C fallback, then the BMP581 value fed in
+directly), and a calibrated ambient reading beats any readback of a
+self-heating die. Neither 3-wire mode (a 9-bit protocol GxEPD2's 4-wire path
+does not implement) nor an SDO on the FPC buys anything a rev B should pay
+for. A probe is still worth running for the cross-check alone:
+`display_probe_readback()` behind `EPD_PROBE`.
 
 ### Board shrink east, 48×35 → 47×35 or further
 
