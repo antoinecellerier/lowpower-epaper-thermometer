@@ -3,14 +3,13 @@
 The tree is a standard ESP-IDF CMake project (`CMakeLists.txt` +
 `src/CMakeLists.txt` + `components/`) that PlatformIO drives. Both boards build
 `framework = espidf` on the official registry platform (`espressif32 @ ^7.0.1`,
-ESP-IDF 6.0.1) — no Arduino framework, no platform fork, no pinned zip URL.
+ESP-IDF 6.0.1): no Arduino framework, no platform fork, no pinned zip URL.
 `idf.py -DIDF_TARGET=esp32c6 build` also works: fonts and the GIT_HASH stamp
 auto-generate at cmake configure time, so outside PlatformIO the stamp is as of
 the last configure rather than the last build.
 
 CLAUDE.md keeps only the rules that destroy data or silently mis-build when
-violated. Everything here is the *why* behind them, plus the traps that cost a
-session to rediscover.
+violated. Everything here is the *why* behind them, plus the traps.
 
 ## libc is pinned to newlib
 
@@ -40,7 +39,7 @@ or the link fails with a missing vtable rather than anything that names the pane
 `t81-set-lut-temperature`: **stock upstream plus one additive commit** adding
 `setTemperature()` to the T81 driver, so the host can choose the waveform LUT
 instead of the driver reading a controller temperature it cannot get over
-hardware SPI (`docs/notes.md`, 2026-08-11). Nothing else diverges — the 2026-08-11
+hardware SPI (`docs/notes.md`, 2026-08-11). Nothing else diverges: the 2026-08-11
 migration that retired the old three-commit fork stands, and this rebases onto
 any future upstream. **To build against stock upstream instead**, check the
 submodule out at `origin/master` and pass `-DDISABLE_PANEL_LUT_TEMPERATURE`;
@@ -86,20 +85,20 @@ Everything the tools pull off a device lives under a single gitignored `local/`:
 
 `tools/artifacts.py` resolves the root from the repo, **not from the CWD**, so an
 artifact lands in the same place wherever the tool was launched from. Point
-`$THERMO_LOCAL_DIR` at another disk when a sweep won't fit — a full one is a few
-hundred MB and `ppk2.py` refuses to start when the target filesystem is short.
+`$THERMO_LOCAL_DIR` at another disk when a sweep won't fit: a full one is a few
+hundred MB, and `ppk2.py` refuses to start when the target filesystem is short.
 
-Two consequences worth knowing. Sweeps and captures are **cited from the
-logbooks by relative path**, so pruning one breaks a doc reference — check
-before deleting, and prefer dropping a run's `*.bin` + `.dec*` caches to
-deleting the directory, since `report.md` and the `*.json` sidecars carry every
-conclusion at 0.05% of the size. And `history.py backup -o` takes whatever path
-you type, which is why `hist-*.bin` stays in `.gitignore` as a safety net.
+Sweeps and captures are **cited from the logbooks by relative path**, so pruning
+one breaks a doc reference. Check before deleting. Prefer dropping a run's
+`*.bin` + `.dec*` caches to deleting the directory: `report.md` and the `*.json`
+sidecars carry every conclusion at 0.05% of the size. `history.py backup -o`
+takes whatever path you type, so `hist-*.bin` stays in `.gitignore` as a safety
+net.
 
 ## Header naming
 
 **Never name a project header like an IDF-internal one.** IDF's mbedtls exposes a
-private `common.h` that shadowed ours — hence `app_common.h`.
+private `common.h` that shadowed ours, which is why ours is `app_common.h`.
 
 ## Generated fonts
 
@@ -144,29 +143,30 @@ PLATFORMIO_BUILD_FLAGS="-DPPK2_DEBUG" pio run -e seeed_xiao_esp32c6_epaper_relea
 pio run -e dfrobot_firebeetle2_esp32e_debug   # <- wipes the C6 image just built
 ```
 
-This bites hardest between building a measurement image and flashing it, since
-the artifacts vanish with no error — the flash just fails on missing files. Pass
+This bites hardest between building a measurement image and flashing it: the
+artifacts vanish with no error, and the flash then fails on missing files. Pass
 the same flags to every env in a batch, or finish the flash before building
 anything else.
 
-`scripts/prune_build_cache.py` keeps that cache bounded: SCons never evicts,
-and every build pushes a fresh ~11MB `firmware.elf`. It ages entries out after
-30 days unused, gated on a stamp file so it walks the cache at most weekly —
-3.7µs on a gated build, ~50ms for a real pass over 12k entries. Age is a true
-LRU because SCons `utime()`s an entry whenever it retrieves one. It only ever
-touches files inside the 2-hex-char shard directories, which is what keeps the
-SConsign DB and `config` at the cache root out of reach; deleting the SConsign
-would cost every env its build state.
+`build_cache_dir` (see `[platformio]`) makes recovery from a wipe cheap but does
+not prevent it. Measured on `dfrobot_firebeetle2_esp32e_debug`: rebuilding a
+deleted env directory drops from 110s to 47s with zero recompiles; the remainder
+is the cmake reconfigure and copying the objects back.
 
-`build_cache_dir` (see `[platformio]`) makes recovering from a wipe cheap —
-measured on `dfrobot_firebeetle2_esp32e_debug`, rebuilding a deleted env
-directory drops from 110s to 47s with **zero** recompiles, the remainder being
-the cmake reconfigure and copying the objects back. It does not stop the wipe,
-so the hazard above is unchanged: what vanishes is still gone until rebuilt.
+`scripts/prune_build_cache.py` bounds that cache, since SCons never evicts and
+every build pushes a fresh ~11MB `firmware.elf`:
+
+- Entries unused for 30 days are removed. Age is a true LRU because SCons
+  `utime()`s an entry whenever it retrieves one.
+- A stamp file gates the walk to at most weekly: 3.7µs on a gated build, ~50ms
+  for a real pass over 12k entries.
+- Only files inside the 2-hex-char shard directories are touched, so the
+  SConsign DB and `config` at the cache root are never deleted. Deleting the
+  SConsign would cost every env its build state.
 
 `PLATFORMIO_BUILD_SRC_FLAGS` is the better tool for a bench flag that only
-`src/` reads — it keeps the framework objects out of the rebuild. It trips the
-same checksum, so it does not avoid the wipe.
+`src/` reads, because it keeps the framework objects out of the rebuild. It
+trips the same checksum, so it does not avoid the wipe.
 
 ## Environments
 
@@ -185,24 +185,24 @@ thermometer_c6_bod_probe                       revA-bigscreen   rev A bench prob
 
 The rev A boards differ only by panel, so they share these envs and the default
 suits boards 2-4. **Board 1 wears the 200x200 GDEY and needs
-`RIG=revA-smallscreen`** — the one mismatch the rig cross-checks cannot catch,
-since both rigs are valid for the env.
+`RIG=revA-smallscreen`**. This is the one mismatch the rig cross-checks cannot
+catch, since both rigs are valid for the env.
 
 `scripts/upload_gate.py` closes it at upload time instead. HistoryStore stamps the
 panel it was built for into the `history` partition header, and that partition
-survives reflashing — so the gate reads 52 bytes back before writing anything and
+survives reflashing, so the gate reads 52 bytes back before writing anything and
 refuses to flash a rig whose panel disagrees with what the board last ran. Only
 the panel is checked: a wrong sensor or board macro still renders a frame and the
 firmware badges it, whereas a wrong panel fails silently because the panel is
 what breaks.
 
-It skips itself, out loud, whenever the answer is not decisive — no archive yet,
-unreadable header, no port — because a gate that blocks correct uploads gets
+It skips itself, out loud, whenever the answer is not decisive (no archive yet,
+unreadable header, no port), because a gate that blocks correct uploads gets
 switched off. Overrides: `ALLOW_RIG_CHANGE=1` for a deliberate panel swap,
 `SKIP_BOARD_CHECK=1` to skip the read entirely. Costs one esptool connect, which
 resets the chip; the upload that follows would have anyway.
 
-Testable with no board attached — it decodes a saved archive image and runs every
+Testable with no board attached: it decodes a saved archive image and runs every
 rig against it:
 
 ```bash
@@ -217,20 +217,20 @@ follow (`EPD_POWER_GATE`, `DISABLE_LEDS`). Each lives in a tracked
 add-a-rig checklist.
 
 `scripts/pre_build.py` resolves `RIG` from the environment, else the env's
-`custom_rig`, and writes `include/generated/rig_config.h` — a fixed-path,
+`custom_rig`, and writes `include/generated/rig_config.h`, a fixed-path,
 two-line selector. Fixed on purpose: switching rigs changes that file's
 *content*, not the project's file list, so the project checksum is undisturbed
 and another env's finished `firmware.bin` survives. Varying
 `PLATFORMIO_BUILD_FLAGS` instead would delete every env's build directory (see
-above), and the LP core would not see the change at all — its sub-build
+above), and the LP core would not see the change at all: its sub-build
 inherits no `build_flags` and reads the selector by relative include.
 
-`include/generated/git_hash.h` exists for the same reason, and it is the more
-expensive lesson: as a `-D` on the global SCons environment the commit hash
-reached every ESP-IDF component's compile line, and SCons puts defines in the
-build signature. Every commit — and every clean/dirty flip, so the first edit
-after a commit and the revert after it — recompiled ~1100 framework objects.
-As a header only the three sources that read it rebuild.
+`include/generated/git_hash.h` exists for the same reason. As a `-D` on the
+global SCons environment the commit hash reached every ESP-IDF component's
+compile line, and SCons puts defines in the build signature. Every commit and
+every clean/dirty flip (the first edit after a commit, and the revert after it)
+recompiled ~1100 framework objects. As a header only the three sources that read
+it rebuild.
 `include/git_hash.h` wraps it so `tools/sim` and `tools/hstest`, which pass
 their own `-DGIT_HASH`, keep winning.
 
