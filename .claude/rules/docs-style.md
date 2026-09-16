@@ -25,6 +25,9 @@ append-only; prose around unchanged data may be restructured freely.
 Budget: a capture or harvest section is under ~40 lines including tables. A
 validation-log row is 3-5 lines. Longer means a second entry or a table.
 
+A logbook that opens with a Results table updates the row whenever a later
+entry supersedes the figure to quote; the row links to that entry.
+
 ## Prose
 
 - One fact per sentence. No nested asides, no dashes as parentheses.
@@ -44,6 +47,21 @@ validation-log row is 3-5 lines. Longer means a second entry or a table.
   `/device-session` skill or the tool's own docs. The log gets a pointer at most.
 - Numbers follow CLAUDE.md "Numbers are measured, not guessed": source, date
   and conditions travel with every figure.
+- Wrap prose at 80 columns. Never split a link or a code span across lines.
+  `tools/docwrap.py check FILE` reports overflow, ragged paragraphs and split
+  spans; `fix` reflows them, whitespace only.
+
+## Restructuring a logbook
+
+Prose may be rewritten around unchanged data. Gate it with `tools/docinv.py`:
+
+- `diff OLD NEW`: every token missing from the new file is restored, or listed
+  with a reason for the user to veto.
+- `diff NEW OLD`: every token new to the file traces to an old sentence
+  (a rounding, a heading label), or goes.
+- Keep every hedge: derived stays derived, superseded stays superseded, two
+  runs' ranges do not merge into one. A second reader checks old against new
+  before the commit; these were the failures found so far.
 
 ## Which file
 
