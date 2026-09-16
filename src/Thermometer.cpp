@@ -461,6 +461,11 @@ static void drift_state_load(const HistoryDriftState *d, bool trust_clock)
   drift_comp_ppm = d->drift_comp_ppm;
   if (drift_comp_ppm > DRIFT_COMP_MAX_PPM || drift_comp_ppm < -DRIFT_COMP_MAX_PPM)
     drift_comp_ppm = 0;
+  // A snapshot from before this field, or from a rig without it, restores a
+  // usable ring and no level. Fit it now rather than waiting a whole interval
+  // for the first resync to.
+  if (drift_comp_ppm == 0)
+    drift_comp_refit();
 #endif
 
   if (trust_clock)
