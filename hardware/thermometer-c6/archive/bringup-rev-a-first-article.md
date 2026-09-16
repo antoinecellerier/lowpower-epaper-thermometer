@@ -326,3 +326,49 @@ stays open in [`../BRINGUP.md`](../BRINGUP.md).
             and confirm it repeats without touching the cable.
             2026-07-30 board 1: exactly two real deep sleeps then the window,
             logging `USB host attached, but this sleep is an observe cycle`.
+
+Thresholds and floor/refresh numbers were done on 2026-07-31 (`1e1048e`,
+`../../../docs/notes.md`).
+
+## Deployment panel on board 2, 2026-08-11
+
+Four GDEH0576T81 landed; one went onto board 2, which until then had run
+panel-less since 2026-08-05. It worked on the factory bridges (JP2 0.47Ω +
+JP5 10µH) with no rework, the third controller family to do so.
+`rev A + BMP581 + GDEH0576T81` had never been measured before that day: every
+earlier battery-life claim for the product substituted both a different board
+and a different panel at once. Phase 3 was no longer gated on board 1 leaving its
+soak; board 1 kept soaking, untouched, and every Phase 3 item could be run on
+the real configuration rather than on the 200×200 stand-in. The first T81 refresh figures ever
+taken at the correct waveform date from here: until 2026-08-11 the panel was
+driven with its ≤5 °C LUT at room temperature (a GxEPD2 fork bug, fixed by
+moving to stock upstream), so every earlier T81 number in this project,
+including the readme's ~45 mC, is at the wrong LUT and does not carry over
+(`../../../docs/notes.md`).
+
+- [x] **VGH/VGL reach spec during refresh with JP2+JP5**, at the
+      pre-regulation rails. **DONE 2026-08-11 at the pre-regulation rails, and
+      the answer is no sag.** Measured at **PREVGH (C5) +20.031 V** and
+      **PREVGL (C11) −19.380 V**, means repeating to 20 mV / 73 mV across 4-5
+      refreshes, held flat for the whole ~3.03 s drive of the **LUT 235
+      waveform**, the heaviest this panel can be given, and the reason the
+      cold arm was used rather than a room-temperature one. Factory JP2 0.47Ω
+      + JP5 10µH, nothing reworked. Full numbers and the shape (step to
+      +19.885 V, climb to +20.08 V within ~300 ms, then flat) in
+      `../../../docs/notes.md`. **This is what the rev B deletion of L2/R15/R16 was
+      gated on**; with three controller families also working on the
+      universal config, JP3+JP6 is margin nothing has needed. Two limits:
+      measured *ahead of* the panel's internal regulation, so C1/C2 themselves
+      are still formally unmeasured; and 10 Hz sees nothing under ~100 ms, so
+      "no sag" means none on a 100 ms timescale. The C1/C2 half stays open in
+      `../BRINGUP.md`.
+
+## Soak start, 2026-08-12
+
+Boards 2 and 4 went on the ten-day soak and board 3 was flashed to start that
+evening, all on one release build (`753afbc` on 3 and 4, `11cd8dd` on board
+2; the commits between are documentation only, so the firmware is identical).
+Board 3 was the last board reachable on USB. The FPC-in/out floor pair
+capture, the ~2 h that would explain board 2's 19.05 µA floor against board
+1's 18.3 µA, was rigged and ready and was traded for the soak start; it stays
+open in `../BRINGUP.md`. From then on board 2 carried the whole campaign.
