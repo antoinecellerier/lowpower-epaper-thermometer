@@ -79,11 +79,11 @@ fix rotation and order first. The gate row and the divider ladder both had every
 shared node running diagonally across their own row.
 
 Loop that worked: author a cluster in `pcb_layout.TRACKS` → check it alone with
-`PCB_NO_ROUTES=1 python3 generator/pcb.py && kicad-cli pcb drc ...` → `make
-route` → diff the failure list. `make route` wrote `out/stragglers.txt` and
-printed only the delta vs the previous pass — fixed/new stragglers plus which
-routed nets re-placed. The failure list names victims; the re-placed list names
-candidate villains. Never pipe it through `tail`; the delta comes first.
+`PCB_NO_ROUTES=1 python3 generator/pcb.py && kicad-cli pcb drc ...` →
+`make route` → diff the failure list. `make route` wrote `out/stragglers.txt`
+and printed only the delta vs the previous pass — fixed/new stragglers plus
+which routed nets re-placed. The failure list names victims; the re-placed list
+names candidate villains. Never pipe it through `tail`; the delta comes first.
 
 ## The router's own geometry, which is not DRC's
 

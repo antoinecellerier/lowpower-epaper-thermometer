@@ -70,8 +70,8 @@ are corridor-contended, and moving non-pinned authored copper resolves it.
 
 ## Legalization attempts — none cleanly converge on this saturated board
 The Stage-2 solution is complete but overlapping; three strategies to legalize
-it (separate to DRC-clean) all thrash:
-1. **Global soft negotiation** (Stage 1 & 2): over-use plateaus (~11-16k cells),
+it (separate to DRC-clean) all thrash: 1. **Global soft negotiation** (Stage 1 &
+2): over-use plateaus (~11-16k cells),
    doesn't reach 0 within a practical iteration budget; ~1min/iter.
 2. **Hard-legal rip-up-reroute** (`--rrr`): keeps the committed set mutually
    legal, routing one net at a time and ripping the committed nets it crosses.
@@ -184,12 +184,12 @@ already handles (west funnel cleared once J5's load left).
 The user hand-routed the ENTIRE board in the KiCad GUI (all non-GND nets,
 DRC-clean, board grown 48×35 → 49×36, ~36% of segments rerouted vs the
 autorouted baseline). Every knot the three routers stalled on fell to
-interactive rip-up with human judgment. The copper was harvested wholesale
-into `generator/pcb_routes.py` (HAND_ROUTED sentinel; `extract_tracks.py
---all -o`); route.py/pathfind.py remain for archaeology and a hypothetical
-from-scratch re-route only. As-routed snapshot: [`archive/`](archive/). Follow-on
-analysis: `verify/topo.py` + `out/topo/REPORT.md` (pour-damage ranking,
-antenna-strip audit, power-via audit).
+interactive rip-up with human judgment. The copper was harvested wholesale into
+`generator/pcb_routes.py` (HAND_ROUTED sentinel; `extract_tracks.py --all -o`);
+route.py/pathfind.py remain for archaeology and a hypothetical from-scratch
+re-route only. As-routed snapshot: [`archive/`](archive/). Follow-on analysis:
+`verify/topo.py` + `out/topo/REPORT.md` (pour-damage ranking, antenna-strip
+audit, power-via audit).
 
 Also for the record: cluster-scoped Opus agents with the corridor facts DID
 make real progress where batch autorouters could not (~EPD_VPP, EN, XTAL —

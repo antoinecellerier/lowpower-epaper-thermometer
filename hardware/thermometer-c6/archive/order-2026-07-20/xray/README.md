@@ -1,10 +1,9 @@
 # JLC first-article X-rays — 2026-07-27
 
-`1.png`–`4.png` as received from JLC (order SMT026072062920). Four frames =
-four distinct assembled boards (unique satellite-ball positions and placement
-jitter per frame; frame↔board mapping unknowable).
-[`annotated/`](annotated/) overlays every
-top-side footprint's bounding box, projected from the board file — the
+`1.png`–`4.png` as received from JLC (order SMT026072062920). Four frames = four
+distinct assembled boards (unique satellite-ball positions and placement jitter
+per frame; frame↔board mapping unknowable). [`annotated/`](annotated/) overlays
+every top-side footprint's bounding box, projected from the board file — the
 evidence for each part identification. `annotate.py` regenerates them.
 
 ## Frame↔board transform (measured, not eyeballed)
