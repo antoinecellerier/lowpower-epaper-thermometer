@@ -41,7 +41,7 @@ facts that do damage when unknown:
 
 ## Numbers are measured, not guessed
 
-- Estimates here have a poor track record — off by 3-10x both ways, once shipping a
+- Estimates here have a poor track record — off by multiples both ways, once shipping a
   watchdog boot-loop. **Label any figure you did not measure as an estimate**, and
   **give every number a source you can point at**: a capture, a log line, a timestamp.
   Never recorded? Say so, in prose as much as in docs — an unknown is data, an
@@ -126,10 +126,9 @@ device too** — flash wear, a flat pack, a panel gone blind. Bench builds show
   unless the choice really is 2-4 discrete alternatives.
 - **Group physical asks into one message** (`/device-session` has the sequencing).
   Asking the user to read the panel? Give the exact string, so the reply is yes/no.
-- **Say what is on the device.** After any flash, erase or inject, state env +
-  `PLATFORMIO_BUILD_SRC_FLAGS` + git hash and append it to
-  `docs/history-store-validation.md` — debug flags change what the panel shows,
-  so an unrecorded build makes every later observation ambiguous.
+- **Say what is on the device.** Every flash, erase or inject gets env +
+  `PLATFORMIO_BUILD_SRC_FLAGS` + git hash appended to
+  `docs/history-store-validation.md`; an unrecorded build reads ambiguous later.
 - **Incremental commits** at natural checkpoints; don't batch large changes, and
   don't propose rewriting local git history — the user asks when they want it.
 - **Simplify aggressively**: if there's a simpler approach, propose it.
