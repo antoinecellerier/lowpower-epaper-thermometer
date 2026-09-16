@@ -21,6 +21,7 @@ charging, LDO power tree. Design driven by the PPK2 measurement campaign in
 | [ROUTER-NOTES.md](ROUTER-NOTES.md) | The retired greedy A* router | historical |
 | [PATHFINDER-NOTES.md](PATHFINDER-NOTES.md) | Negotiated-congestion router experiment, not adopted | historical |
 | [archive/](archive/README.md) | Hand-routed snapshots, the 2026-07-20 order as uploaded, worktree patches | record |
+| [archive/bringup-rev-a-first-article.md](archive/bringup-rev-a-first-article.md) | Rev A first article on board 1, Phases 0–2 and the Phase 3 items closed since | record |
 | [../datasheets/](../datasheets/README.md) | Panel and carrier vendor PDFs, panel readback findings | reference |
 
 **Status: rev A built and working.** Ordered 2026-07-20
