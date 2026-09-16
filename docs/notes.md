@@ -1345,7 +1345,7 @@ slowly (PREVGL still at −6 to −11 V several seconds later): the gated panel 
 4.7 µF discharging. The universal config delivers full, stable rails on the
 deployment panel; three controller families run on it unmodified; the
 datasheet pair (JP3 2.2 Ω + JP6 47 µH) is unneeded margin
-(`hardware/thermometer-c6/README.md`, rev B candidates). The ~200 mV
+(`hardware/thermometer-c6/REV-B.md`). The ~200 mV
 within-plateau spread is ripple and range resolution.
 
 Open:

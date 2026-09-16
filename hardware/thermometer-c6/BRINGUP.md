@@ -124,7 +124,7 @@ transients.
       (c) USB with a pack charging: adds U4's ~130mW, which is 37mm away and
           so should present as whole-board warming rather than a local
           gradient. If (c) ≫ (b), the charger dominates and no sensor
-          placement fixes it (README rev B candidate); if (b) ≈ (c), the
+          placement fixes it (`REV-B.md` candidate); if (b) ≈ (c), the
           local sources do.
       Then decide whether readings taken while charging should be suppressed
       or flagged rather than filed into the hourly ring. Cheap A/B for the
