@@ -39,16 +39,17 @@ this file is the human procedure around it. Settled fab decisions live in
 ## 2b. Confirmations raised for the 2026-07-20 order
 
 Drafted 2026-07-18; the order was paid 2026-07-20 and the boards landed
-2026-07-29. All four items are closed. The dispositions taken and the as-built
+2026-07-29. Every item is closed. The dispositions taken and the as-built
 state are the archive's
 [known items carried into the order](archive/README.md#order-2026-07-20--the-rev-a-production-order-first-order);
 the J3 datum and land derivation is recorded there too.
 
 | Item | Raised | Disposition | Closed |
 |---|---|---|---|
-| `JLCJLCJLCJLC` order-mark token under "Remove Mark" | 2026-07-18 | Token deleted from `generator/pcb_layout.py`. JLC support answered that the order-number-at-a-specified-position service "is already unavailable", so the token could never do its job and risked only printing literally on back silk. The board ships with no order mark. | 2026-07-20 |
-| J4 (FPC-05FB) geometry and routing | 2026-07-18 | Re-placed mouth-east, contact-tail/pad column west (x41.45), pads renumbered so pad 1 = panel circuit 1 stays at the north end; `circuit.py` and the README FPC pin table unchanged. Body depth 5.40, mouth 4.95mm east of the pad row at x46.40, 1.60mm inboard of the edge; the earlier 6.55/6.6 figures came from bounding-boxing raw CARTESIAN_POINTs (derivation: README "BOM"). Fanout re-routed: 0 unconnected, DRC REAL=0 DEFERRED=0 WAIVED=0 at full severity. CPL delta stayed `0`/`confidence: low`, covered by Confirm Parts Placement and the DFM gate. Pin 1 and mouth-east verified by continuity on board 1 (`BRINGUP.md` Phase 0). | respin 2026-07-19, depth corrected 2026-07-20 |
-| J3 (USB-C) datum, land and routing | 2026-07-18 (datum and land 2026-07-20) | 2026-07-19 (`out/j3-proof/`): re-placed mouth-north (rot 180); the old rot-0 placement faced the mouth south into the board, an unpluggable connector masked by a 3D model mis-registered 180°. 2026-07-20: datum moved 1.415mm south and the land pattern forked (figures in the archive); the `edge-clearance-usb-c` DRU rule and its waiver deleted; copper re-routed, board-wide 0 unconnected, 0 dangling, DRC REAL=0 DEFERRED=0 WAIVED=0 at full severity, schematic parity 0. Preview walked 2026-07-20: the ~1.3mm offset is a JLC model-seating artifact, confirmed by JLC support with DFM as a hard gate on their side, as far as a frontline answer can. CPL delta stayed `0`/`confidence: low`, covered by Confirm Parts Placement and the DFM gate. X-rays show the 0.5mm row unbridged; board 1 enumerates over USB. | respins 2026-07-19 and 2026-07-20 |
+| `JLCJLCJLCJLC` order-mark token under "Remove Mark" | 2026-07-18 | Token deleted from `generator/pcb_layout.py`: per JLC support the order-number-at-a-specified-position service "is already unavailable", so the token risked only printing literally on back silk | 2026-07-20 |
+| J4 (FPC-05FB) geometry and routing | 2026-07-18 | Re-placed mouth-east; pads renumbered, pad 1 = panel circuit 1 north, `circuit.py` unchanged; body depth 5.40 (README "BOM"); fanout re-routed, DRC clean; pin 1 and mouth verified by continuity on board 1 | respin 2026-07-19, depth corrected 2026-07-20 |
+| J3 (USB-C) orientation | 2026-07-18 | Re-placed mouth-north (`out/j3-proof/`): the rot-0 placement faced the mouth into the board, masked by a 3D model mis-registered 180° | respin 2026-07-19 |
+| J3 (USB-C) datum, land and routing | 2026-07-20 | Datum moved 1.415mm south and the land forked; copper re-routed, 0 unconnected, 0 dangling; the ~1.3mm preview offset is a JLC model-seating artifact. As built: the archive known items above | respin 2026-07-20 |
 | D1 (CHG LED) CPL delta reset to 0 by the J3 reroute (rot 90 → 180), voiding its 2026-07-18 LED_0603 preview verification | 2026-07-20 | Resolved without a re-walk: its `0` was preview-verified 2026-07-18 (cathode cue S), and a rotation delta corrects a footprint↔library convention offset, so it is independent of the placement change. | 2026-07-20 |
 
 The J3 clause stays in the PCBA Remark (§3) and Confirm Parts Placement stays

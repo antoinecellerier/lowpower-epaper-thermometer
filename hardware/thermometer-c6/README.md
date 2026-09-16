@@ -101,10 +101,10 @@ Transcribed from `hardware/datasheets/DESPI-C02_SCH V1.0.pdf` (visual + embedded
 
 | GPIO | Function | Notes |
 |---|---|---|
-| 0 / 1 | XTAL_32K_P / N | FC-135 32.768kHz + 20pF; R9 10M bias DNP — the C6's 32k oscillator amplifier runs at very low gm, so startup margin depends on crystal ESR spread (≤70kΩ allowed, rises when cold) and stray C; the parallel bias resistor (Espressif HDG checklist) gives the inverter a DC feedback path if a given board/batch won't start |
+| 0 / 1 | XTAL_32K_P / N | FC-135 32.768kHz + 20pF; R9 10M bias resistor DNP (rationale below the table) |
 | 2 | VBAT_ADC (ADC1_CH2) | sense node of switched divider; 0V when divider off |
 | 3 | VDIV_EN | 100k pull-down → divider hard-off in deep sleep |
-| 4 | VBUS_SENSE (100k/100k from VBUS) | USB-presence detect; divider is dead (0V, zero drain) with USB unplugged |
+| 4 | VBUS_SENSE (100k/100k from VBUS) | USB-presence detect, suppresses the SoC shutdown on USB; divider is dead (0V, zero drain) with USB unplugged |
 | 5 | spare → J5 debug header | strap-adjacent (SDIO clock-edge only at default eFuses) — keep high-Z |
 | 6 / 7 | LP I2C SDA / SCL | fixed by silicon; BMP581; 4.7k pull-ups to 3V3 |
 | 8 | spare → J5 | STRAP: must be free to pull high for download boot — header only |
@@ -116,6 +116,12 @@ Transcribed from `hardware/datasheets/DESPI-C02_SCH V1.0.pdf` (visual + embedded
 | 18–21 | EPD MOSI/SCK/CS/DC | SDIO-group boot toggles drive an unpowered panel — harmless |
 | 22 | EPD RST | 10k pull-up to **EPD_VCC** (gated) |
 | 23 | EPD BUSY (input) | |
+
+R9 parallels the crystal and is DNP by default. The C6's 32k oscillator
+amplifier runs at very low gm, so startup margin depends on crystal ESR spread
+(≤70kΩ allowed, rises when cold) and stray C. The bias resistor (Espressif HDG
+checklist) gives the inverter a DC feedback path if a given board or batch
+won't start.
 
 ## Debug header J5 (2×5, DNP — GND-first, no VBAT)
 
@@ -234,7 +240,8 @@ not margin.
   at the REAR (actuator) face; the mouth and cable entry are on the far side,
   4.95mm from the pad centers. Body depth is 5.40 per the XUNPU drawing and a
   VERTEX_POINT-only STEP bbox (`out/j3-land/` §7, 2026-07-20). The earlier
-  6.55 came from bounding-boxing raw CARTESIAN_POINTs, which include
+  6.55 (also quoted as 6.6) came from bounding-boxing raw CARTESIAN_POINTs,
+  which include
   LINE/AXIS2_PLACEMENT_3D entities that own no geometry.
 - On the board J4 is placed at rot 90 with the tail/pad column WEST (x41.45)
   and the mouth EAST at x46.40, so the panel cable approaches from the east
@@ -277,20 +284,22 @@ against circuit.py (anonymous `~` nets matched by pin set).
 ## Closed items
 
 Sign-off items and follow-up phases, all dispositioned. The bench queue is
-[`BRINGUP.md`](BRINGUP.md).
+[`BRINGUP.md`](BRINGUP.md); phase numbers below refer to the
+[first-article record](archive/bringup-rev-a-first-article.md).
 
 | Item | Disposition | Date |
 |---|---|---|
 | BMP581 sourcing | Restocked at LCSC (3,675 pcs); the ordered boards populate U5 BMP581. The BMP585 (C18184976) remains the U6 populate-one alternate for outdoor/media-resistant builds, or if the 581 dries up again | 2026-07-17 |
 | Si1308EDL stock thin | Resolved by the order: C469327 is on the boards; the fallback Si1304BDL clone C7419947 was never needed | — |
-| Reverse-polarity protection | Q6 AO3401A P-FET at the JST is fitted ("Why these choices"); a reversed cell is blocked, MCP73831's −0.3V abs-max is respected. Body diode 0.4259V diode-mode pass on board 1 ([archive record](archive/bringup-rev-a-first-article.md), Phase 0). Keyed JST + silk remain the first line of defense | — |
-| EPD SPI/control series resistors omitted | Closed by construction, no veto: boards fabbed without them, firmware floats the pins when the panel is gated off (src/Display.cpp), first render passed on board 1. Disposition in [`SCHEMATIC-VERIFICATION.md`](SCHEMATIC-VERIFICATION.md) | — |
-| JST-PH polarity | DMM on the loose plug: red wire / + contact mates with J1's `+`-marked pad ([archive record](archive/bringup-rev-a-first-article.md), Phase 0). JST vs Adafruit convention still differs; re-check any new pigtail | 2026-07-29 |
-| FPC footprint | Hand-drawn `local:XUNPU_FPC-05FB-24PH20` (BOM section), respun 2026-07-19 after a numeric STEP proof (`out/j4-proof/`), body depth corrected to 5.40 on 2026-07-20. Placement verified pre-order (75/75 placements, [`archive/order-2026-07-20/`](archive/order-2026-07-20/)); J4 pin-1 north / mouth-east confirmed by continuity on board 1 ([archive record](archive/bringup-rev-a-first-article.md), Phase 0) | — |
+| Reverse-polarity protection | Q6 AO3401A P-FET at the JST ("Why these choices") blocks a reversed cell; keyed JST + silk stay the first line of defense; body diode 0.4259V diode-mode pass on board 1 (Phase 0) | — |
+| EPD SPI/control series resistors omitted | Closed by construction: boards fabbed without them, firmware floats the pins when the panel is gated off (src/Display.cpp), first render passed on board 1 (Phase 2); see SCHEMATIC-VERIFICATION.md | — |
+| JST-PH polarity | DMM on the loose plug: red wire / + contact mates with J1's `+`-marked pad (Phase 0). JST vs Adafruit convention still differs; re-check any new pigtail | 2026-07-29 |
+| FPC footprint | Hand-drawn `local:XUNPU_FPC-05FB-24PH20` (BOM section), respun 2026-07-19 after a numeric STEP proof (`out/j4-proof/`), body depth corrected to 5.40 | 2026-07-20 |
+| FPC placement and pin 1 | 75/75 placements verified pre-order ([`archive/order-2026-07-20/`](archive/order-2026-07-20/)); J4 pin-1 north / mouth-east confirmed by continuity on board 1 (Phase 0) | 2026-07-29 |
 | 32k crystal populated by default | On the ordered boards and oscillating on board 1 (no RTC fallback warning in the boot log); cold start is a [`BRINGUP.md`](BRINGUP.md) Phase 3 item | — |
 | Old Copilot draft | `hardware/kicad/` was never merged and exists only on the unmerged branch `hardware/custom-esp32c6-pcb`. Nothing in the tree to delete; whether to delete that branch is still open | — |
 | PCB layout (2-layer) | Booster switch loop tight, RESE sense short, no-copper zone under BMP581, antenna keep-out per Espressif HDG; JLCPCB gerbers/drill + CPL/BOM via `make fab`, order per [`ORDERING.md`](ORDERING.md) | — |
-| Firmware | `THERMOMETER_C6_BOARD` variant (`thermometer_c6_*` envs in platformio.ini): EPD on GPIO18–23 + gate GPIO14 with float-on-off, battery divider GPIO2/3, VBUS sense GPIO4 (suppresses SoC shutdown on USB), LED GPIO15, 32k crystal via `sdkconfig.defaults.thermometer_c6` | — |
+| Firmware | `THERMOMETER_C6_BOARD` variant (`thermometer_c6_*` envs in platformio.ini): pins per the pin map above, 32k crystal via `sdkconfig.defaults.thermometer_c6` | — |
 | Fab order | [`archive/order-2026-07-20/`](archive/order-2026-07-20/); landed cost breakdown in [`ORDERING.md`](ORDERING.md) §8 | 2026-07-20 |
 | Bring-up Phases 0–2 | Done on board 1 ([archive record](archive/bringup-rev-a-first-article.md)); measured numbers in the [`docs/notes.md`](../../docs/notes.md) power logbook | 2026-07-29 |
 

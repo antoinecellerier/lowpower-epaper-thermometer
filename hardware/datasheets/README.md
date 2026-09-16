@@ -39,9 +39,22 @@ pin back (established 2026-08-05).
 
 | Controller | Module data pin | Readback | Identifier | Source |
 |---|---|---|---|---|
-| UC8151D | `SDIN`, single | **measured working**: only three registers answer, `0x70` REV → `01 0e`, `0x71` FLG → `13 13`, `0x40` temperature → `d2 00`; each byte identical whether the input was pulled up or down (so actively driven), and identical before and after GxEPD2's init; `0x61` TRES and `0x00` PSR float, before init too; foreign SSD168x commands float, which is the control | `0x70` REV → `LUT_REV` from OTP `0x001`, the one panel-intrinsic value on offer, since a waveform LUT is tuned to its glass | board 2 + GDEY0213M21, 2026-08-05 |
+| UC8151D | `SDIN`, single | **measured working**: only three registers answer (REV, FLG, temperature); TRES and PSR float, as do foreign SSD168x commands (table below) | `0x70` REV → `LUT_REV` from OTP `0x001`, the one panel-intrinsic value on offer, since a waveform LUT is tuned to its glass | board 2 + GDEY0213M21, 2026-08-05 |
 | SSD1681 | `SDA`, single; 4-wire read procedure documented | expected working, unmeasured | **`0x38`: 10-byte User ID in OTP**; the only thing that tells the Z90 from the GDEM0154I61 (behind the GDEY0154D67 driver), both on this controller | datasheet |
 | SSD2677 | `SDA`, single, bonded to FPC pin 14 | **returns 0 over hardware SPI**; panel capability untested | unknown | board 2 + T81, 2026-08-11 |
+
+UC8151D registers probed, board 2 + GDEY0213M21, 2026-08-05. Each answering
+byte was identical whether the input was pulled up or down, so the line is
+actively driven, and identical before and after GxEPD2's init.
+
+| Command | Answer | Note |
+|---|---|---|
+| `0x70` REV | `01 0e` | driven |
+| `0x71` FLG | `13 13` | driven |
+| `0x40` temperature | `d2 00` | driven |
+| `0x61` TRES | floats | before init too |
+| `0x00` PSR | floats | before init too |
+| foreign SSD168x commands | float | the control |
 
 The T81's 0 is a verdict on the host, not on the panel: GxEPD2's `_readData()`
 samples the data line from software and is documented to work only in
