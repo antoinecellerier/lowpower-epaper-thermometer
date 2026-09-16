@@ -128,18 +128,21 @@ Everything else comes from this table:
 - Current reading marked with filled dot (radius 4 large, 2 small)
 - Thicker line (2px) on large displays (chart_h >= 100)
 - Spline resolution: 16 steps/segment large, 8 medium, 4 small
-- Adaptive gridline step: 1 degree when chart_h >= 100 and range <= 8, else 2; on small charts `max(2, range/2)`
+- Adaptive gridline step: 1 degree when chart_h >= 100 and range <= 8, else 2;
+  on small charts `max(2, range/2)`
 - Dotted gridlines (8px spacing large, 5px small)
 - X-axis labels at 6-hour wall-clock marks (0h, 6h, 12h, 18h), shown only when chart_h > 30
 
 ### 30-Day Monthly Chart
 - Two rendering paths based on display width:
-  - **Large displays** (chart_w >= 400, e.g. 920x680): hourly resolution showing all 720 HourlyEntry
-    points as three Catmull-Rom splines — avg (solid thick), max (arc-length dotted), min (arc-length dotted).
-    Daily temperature cycles and transient events are visible.
-  - **Small displays** (chart_w < 400): daily summaries derived from hourly data at render time.
-    Three splines — avg (solid thick), max (arc-length dotted), min (arc-length dotted) on large zones
-    (chart_h >= 60); single avg spline on small zones.
+  - **Large displays** (chart_w >= 400, e.g. 920x680): hourly resolution showing
+    all 720 HourlyEntry points as three Catmull-Rom splines — avg (solid thick),
+    max (arc-length dotted), min (arc-length dotted). Daily temperature cycles
+    and transient events are visible.
+  - **Small displays** (chart_w < 400): daily summaries derived from hourly data
+    at render time. Three splines — avg (solid thick), max (arc-length dotted),
+    min (arc-length dotted) on large zones (chart_h >= 60); single avg spline on
+    small zones.
 - Arc-length dotted lines use `draw_spline_dotted` (~2px spacing) for envelope (min/max) curves
 - Thick lines (2px) on large zones (chart_h >= 80)
 - Skipped entirely if zone height < 20px
