@@ -215,6 +215,7 @@ wipes the RTC drift window.
 | 2026-08-05 .. 2026-08-23 | FireBeetle 2 ESP32-E + BMP390L + GDEH0154Z90, `1ea3cd7`, `dfrobot_firebeetle2_esp32e_release`, **phase-2 arm 1** (pinned: 1440 wakes/day, repaint every 60th, resync 12h), on battery | 12h × 35 resyncs (18.01d observed) | +445s .. +219s (+7975s total) | **+5124.6ppm** window-weighted (+5041…+5229, **±2.0%**) | 12h (pinned) | **The duty-cycle model's headstone.** Phase 1 fitted `ppm ≈ 5339 − 1.342 × wakes/day` and predicted **+3385ppm** at this arm's 1453 wakes/day. Measured +5124.6, a **1740ppm miss**, while the rate moved only **+1.1%** from phase 1's +5066ppm across a 7× increase in wake rate. Dispersion did tighten, ±4.5% → ±2.0%. The same image still holds phase 1's ten `arm`=0 records and they re-decode to **+5066.3ppm, ±4.5%** — the published figure to the digit, 18 days and one reflash later. [Below](#arm-1-harvested-2026-08-23--the-pre-registered-test-and-what-it-actually-found). |
 | 2026-08-08 .. 2026-08-23 | XIAO ESP32-C6 + BMP581 + Seeed ePaper hat (GDEW029I6FD), `2fa3750`, `seeed_xiao_esp32c6_epaper_release`, **phase-2 arm 3** (vanilla, resync pinned to 12h), 400mAh pack | 12h × 16 resyncs (14.41d observed, **12 failed attempts** stretching windows to 24–49h) | +1s .. +158s | **+607ppm** window-weighted (+23…+1184, **±96%**) | 12h (pinned) | Doubled from phase 1's **+305ppm** (n=3, ±63%) on the same board, though neither figure is tight enough to call that a change. Its three pre-experiment `arm`=0 records re-decode to **+304.5ppm** against a published +305 — the second published figure this session round-trips out of an archive. Covariate structure matches arm 1's (ambient +0.577, spread −0.558, wakes −0.550) and **collapses the same way under partial correlation**. **43% of resync attempts failed**, against `resync_fail_count == 0` at the day-4 gate check. [Below](#arm-3-harvested-2026-08-23--the-covariate-signature-repeats-and-still-collapses). |
 | 2026-08-24 .. 2026-09-16 | FireBeetle 2 ESP32-E + BMP390L + GDEH0154Z90, `ef27bd0`, `dfrobot_firebeetle2_esp32e_release`, **phase-2 arm 2** (pinned: 1440 wakes/day, repaint every 5th, resync 12h), on battery | 12h × 46 resyncs (23.02d observed, 0 failed) | +205s .. +210s (+9548s total) | **+4801ppm** window-weighted (+4696…+4882, **±2.2%**) | 12h (pinned) | Predicted +4790 before the read from the awake/asleep mixture; measured +4801. [Below](#arm-2-harvested-2026-09-16--the-awake-path-is-clocked-right-and-the-mixture-model-holds). |
+| 2026-08-25 .. 2026-09-16 | XIAO ESP32-C6 + BMP581 + Seeed ePaper hat (GDEW029I6FD), `cfcc35f`, `seeed_xiao_esp32c6_epaper_release`, **phase-2 arm 4** (pinned: 1440 wakes/day, repaint every 60th, resync 12h), 400mAh pack | 12h × 42 resyncs (23.02d observed, 4 failed, all in the first 5 windows) | +0s .. +21s (+637s total) | **+320ppm** window-weighted (0…+485, **±100%**) | 12h (pinned) | Pinning did not tighten the C6: relative scatter unchanged from arm 3, level halved back to phase 1's. [Below](#arm-4-harvested-2026-09-16--pinning-does-not-tighten-the-c6). |
 
 Rate = drift / window, in ppm. Sign convention matches the badge: negative =
 device clock behind real time.
@@ -706,6 +707,44 @@ does nothing here (+0.2ppm/day; both halves +4801), unlike arm 5.
 
 Pack: 4136mV at crossover → 3688mV, **−18.9mV/day two-point** at 288 Z90
 repaints/day, against −4.9mV/day at 25/day in arm 1.
+
+### Arm 4, harvested 2026-09-16 — pinning does not tighten the C6
+
+Image `local/archives/hist-arm4-xiao-hat-20260916.bin`, 43 records at `arm`=4.
+The first carries `d_boot = −1022` from the RTC wipe and is dropped. Panel
+before the park: `! EXP 4 60s/RESYNC/REFRESH`, footer `#34442 r593 lp34441
+23d16h`.
+
+| gate (day 24) | read | expected |
+|---|---|---|
+| wakes/day | 1453–1456 | 1440 |
+| `#÷r` | 58.1 | 58 |
+| `lp` vs `#` | 34441 vs 34442 | 1:1 — the LP pin reached the binary |
+| failed resyncs | 4 of 46, all within the first 5 windows | — |
+
+**Rate +320ppm, ±100%, sd 156ppm, n=42.** The question this arm was set: does
+pinning the cadence tighten the C6 the way it did the E (±4.5% → ±2.0%)?
+
+| | arm 3 (vanilla) | arm 4 (pinned) |
+|---|---|---|
+| rate | +607 | +320 |
+| sd | 319 | 156 |
+| sd / rate | 52% | 49% |
+| widest deviation | ±96% | ±100% |
+| r(ppm, ambient) | +0.577 | −0.016 |
+| r(ppm, wakes/day) | −0.550 | +0.008 |
+| r(ppm, elapsed) | +0.192 | −0.020 |
+
+**No.** The absolute scatter halved with the level and the relative scatter did
+not move. Every covariate reads zero, including elapsed time. The per-record
+noise floor at these windows is ~23ppm, so the 156ppm scatter is real.
+
+**The level is not stable between runs either**: +305 (phase 1) → +607 (arm 3)
+→ +320 (arm 4) on one board. Nothing journaled separates those runs.
+
+The wake counter reads ambient on this board too, at **−2.33 wakes/day per °C**
+(r=−0.990; the E reads −2.8), so the LP timer's slow clock has a tempco the
+drift rate does not show (−2.4ppm/°C, r=−0.016).
 
 ### Photo-transcribed run: C6 + DESPI-C02, 2026-07-29 .. 2026-08-04
 
@@ -1293,7 +1332,7 @@ of a boot loop.
 | Rig | Arm | Hash | Cadence |
 |---|---|---|---|
 | FireBeetle 2 E | **2** | `ef27bd0` | pinned 1440 wakes/day, repaint every 5th (288/day)  harvested 2026-09-16, still running |
-| XIAO C6 + Seeed hat | **4** | `cfcc35f` | pinned 1440 wakes/day, repaint every 60th (24/day) |
+| XIAO C6 + Seeed hat | **4** | `cfcc35f` | pinned 1440 wakes/day, repaint every 60th (24/day)  harvested 2026-09-16, still running |
 | XIAO C6 + DESPI-C02 + T81 | **5** | `f5e1749` | unchanged — harvested and RST'd, not reflashed |
 
 Both crossover builds are on HEAD rather than their arms' original trees, so ~18
