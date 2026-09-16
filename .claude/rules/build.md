@@ -58,8 +58,7 @@ two `seeed_xiao_esp32c6`-based families take different rigs.
   regeneration (which triggers a full rebuild). Verify the value actually
   reached the image before trusting a result:
   `grep -o '"<CONFIG_NAME>": [a-z0-9]*' .pio/build/<env>/config/sdkconfig.json`.
-  This bit a brownout-level change on 2026-08-11: the reflash reported SUCCESS
-  and the board kept the level being changed away from.
+  A reflash reports SUCCESS either way (`docs/build-system.md` has the case).
 - libc is pinned to newlib (`CONFIG_LIBC_NEWLIB`) deliberately. Don't switch to
   picolibc while PlatformIO drives the LP-core sub-build.
 

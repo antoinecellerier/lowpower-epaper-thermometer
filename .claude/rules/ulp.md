@@ -41,21 +41,9 @@ build**: PlatformIO signs the LP object on `lp_core_main.c`'s own content, so
 editing a header rebuilt nothing and the previously built `ulp_main.bin` was
 embedded again — silently, with a successful build.
 
-Measured 2026-08-23. An `#error` in `lp_core_bmp58x.h` does not fail the build;
-the same `#error` in `lp_core_main.c` does. Neither touching the source (the
-decider is content, not mtime) nor deleting `esp-idf/src/ulp_main/` helps —
-nothing left in the graph needs the artifact. Adding a generated stamp file to
-`ulp_sources` does not help either: the stamp recompiles, the stale object is
-`lp_core_main.c`'s. **Only a build with `.pio/build_cache` cleared produces a
-correct binary.**
-
-This is upstream and long-standing: [platform-espressif32
-#517](https://github.com/platformio/platform-espressif32/issues/517), open since
-March 2021, reported there as ULP *sources* going unnoticed.
-
-What it cost: an experiment arm was flashed with the wrong wake cadence while the
-`! EXP` badge, the ULP word-count check and the baked git hash all reported
-success. **None of the existing gates look at the LP binary.**
+**Only a build with `.pio/build_cache` cleared produces a correct binary**, and
+none of the existing gates look at the LP binary. Evidence and the upstream
+issue: `docs/build-system.md`.
 
 So:
 
@@ -94,9 +82,8 @@ aborting if it ever misfits.
 
 It preprocesses with `build_src_flags` applied on top of the global env,
 because that is what the ULP sources are compiled with. A bench macro that
-changes the program (`ULP_ALWAYS_WAKE` swaps the whole wake body:
-127/128 words without it, 110/128 with) must reach the check, or it reports a
-count for a program the build never compiled.
+changes the program (`ULP_ALWAYS_WAKE` swaps the whole wake body) must reach
+the check, or it reports a count for a program the build never compiled.
 
 ## ULP data and `RTC_DATA_ATTR` share the same 8KB
 

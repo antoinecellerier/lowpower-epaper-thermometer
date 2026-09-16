@@ -59,6 +59,12 @@ Worked example of why the authored/generated distinction matters (the rule is in
 looks like a tuning decision, but it is the IDF default that follows from
 selecting `EXT_CRYS`. Nobody here chose 3000.
 
+A stale generated file bit a brownout-level change on 2026-08-11: the reflash
+reported SUCCESS and the board kept the level being changed away from, because
+the edited `sdkconfig.defaults.thermometer_c6` was never re-read. Delete
+`sdkconfig.<env>` and verify the value in the built `sdkconfig.json`, as the
+rule says.
+
 ## Partition table
 
 Lives in `partitions.csv` (2048KB single app, no OTA; 1920KB `history` data
@@ -120,6 +126,26 @@ if it ever misfits.
 
 On ESP32-E, `CONFIG_ULP_COPROC_RESERVE_MEM=512` preserves the layout
 `ULP_DATA_BASE` assumes.
+
+### Stale LP binary after a header edit, 2026-08-23
+
+PlatformIO signs the LP object on `lp_core_main.c`'s own content. When the
+sensor programs were headers under `ulp/`, editing one rebuilt nothing and the
+previous `ulp_main.bin` was embedded again, silently, with a successful build.
+An `#error` in `lp_core_bmp58x.h` did not fail the build; the same `#error` in
+`lp_core_main.c` did. Neither touching the source (the decider is content, not
+mtime) nor deleting `esp-idf/src/ulp_main/` helped, since nothing left in the
+graph needed the artifact. A generated stamp file in `ulp_sources` did not help
+either: the stamp recompiles, the stale object is `lp_core_main.c`'s. Only a
+build with `.pio/build_cache` cleared produced a correct binary.
+
+The cause is upstream and long-standing:
+[platform-espressif32 #517](https://github.com/platformio/platform-espressif32/issues/517),
+open since March 2021, reported there as ULP sources going unnoticed. What it
+cost here: an experiment arm was flashed with the wrong wake cadence while the
+`! EXP` badge, the ULP word-count check and the baked git hash all reported
+success. The rule that follows (no headers under `ulp/`, verify the binary's md5
+after a cache clear) is in [`.claude/rules/ulp.md`](../.claude/rules/ulp.md).
 
 ## platformio.ini structure
 
