@@ -21,9 +21,8 @@ That is why the crash log lives in `.rtc_noinit` and why history is mirrored to
 flash. Anything that must outlive a panic goes in one of those two, never in
 plain `RTC_DATA_ATTR`.
 
-Any esptool operation (including `history.py backup`) enters download mode and
-presents as `rst:0x1 POWERON_RESET`, so it wipes RTC as a side effect. Harvest at
-the end of a run, not during one.
+Any esptool operation, including `history.py backup`, enters download mode and
+wipes RTC; harvest at the end of a run (`/device-session`).
 
 ## Version bumps
 
