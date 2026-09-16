@@ -2119,5 +2119,10 @@ At the pair's rate, 3964 → 3550mV (`low_battery_mv`) is **~140 days**. That
 extrapolates across most of the plateau from an 11-day window, so treat it as an
 order of magnitude, not a run-length prediction.
 
+**FireBeetle, phase-2 arm 2 (2026-08-23 .. 2026-09-16):** 4136 → 3688mV over
+23.7d, **−18.9mV/day two-point**, at 1440 wakes and 288 Z90 repaints a day.
+Arm 1 on the same pack ran −4.9mV/day at 25 repaints/day. Both are panel
+readings, not curves.
+
 Drift rates and the BMP581 pair comparison from the same harvest are in
 [clock-drift.md](clock-drift.md).
