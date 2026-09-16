@@ -72,5 +72,7 @@ Prose may be rewritten around unchanged data. Gate it with `tools/docinv.py`:
 | `history-store-validation.md` | flash archive results on hardware, and every flash / erase / inject as a device-state row |
 | `footprint.md` | binary size and build time, one row per significant change |
 | `captures/`, `photos/` | every PPK2 screenshot and photo; cite by relative path so the link opens |
+| `README.md` | index, one row per doc with a status; a new doc adds its row |
+| `archive/` | finished or abandoned work, moved here with a banner stating the outcome; never deleted |
 
 `readme.md` gets a one-line pointer to the logbook, never the finding.

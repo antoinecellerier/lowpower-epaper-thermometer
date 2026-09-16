@@ -103,7 +103,7 @@ All measurements are 1-minute averages in steady state (excluding initial boot s
 - **With EPD VCC disconnected: ~28 µA** — essentially bare-board baseline
 - **The DESPI-C02 ePaper adapter board draws ~534 µA quiescent** — this is the dominant power consumer
 - ULP + RTC_PERIPH + BMP390L adds only ~1 µA above the 27 µA bare-board baseline
-- Hardware RTC I2C peripheral could not be made to work (BUS_BUSY stuck, see docs/rtc-i2c-research.md)
+- Hardware RTC I2C peripheral could not be made to work (BUS_BUSY stuck, see docs/archive/rtc-i2c-research.md)
 - GPIO pin isolation (hold RST LOW, float SPI) does not reduce the DESPI-C02 draw — it's a hardware issue
 
 ## DESPI-C02 quiescent current (known hardware issue)

@@ -59,10 +59,10 @@ facts that do damage when unknown:
   refresh cadence is delta-triggered, so it tracks how volatile the room is.
   Don't assume which dominates: measured, it is refreshes on the E rig and the
   sleep floor on the C6, both single-digit coulombs/day.
-- Logbooks, in order of authority: `docs/notes.md` (power), `docs/clock-drift.md`
-  (drift), `docs/footprint.md` (size/build time — append a row after significant
-  changes), `docs/history-store-validation.md` (proven on hardware). Read the log
-  before quoting a number; carry its date and conditions with the figure.
+- Logbooks, by authority: `docs/notes.md` (power), `docs/clock-drift.md` (drift),
+  `docs/footprint.md` (size/build time, one row per significant change),
+  `docs/history-store-validation.md` (proven on hardware); index `docs/README.md`.
+  Read the log before quoting a number; carry its date and conditions with it.
 
 ## Build system (pure ESP-IDF)
 

@@ -790,7 +790,7 @@ static lease / 321mC hotspot on rev A board 2, 2026-08-11 (`docs/notes.md`).
 This cost also sets the first-sync policy in `maybe_ntp_resync()`: retrying a
 never-set clock on every hourly wake would cost 36–108 C/day, so the bootstrap
 retries hard within one session and then backs off to ~1 attempt/day. The
-RTC-rendezvous design in [multi-device-research.md](multi-device-research.md)
+RTC-rendezvous design in [multi-device-research.md](archive/multi-device-research.md)
 (master wakes 200ms early, listens 500ms) needs ≤ ±1% residual (0.16s after an
 hour).
 
