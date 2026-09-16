@@ -119,6 +119,7 @@ struct DisplayStats {
   const int16_t *drift_ppm_hist;  // rate of each retained resync, newest last
   const uint16_t *drift_win_min;  // window each rate was measured over, minutes
   uint8_t drift_ppm_count;        // valid entries (0..DRIFT_PPM_HIST_SIZE)
+  int32_t drift_comp_ppm;         // rate the clock is being corrected by (DRIFT_COMPENSATION), 0 = none
 
   // Temperature context
   float previous_temp;

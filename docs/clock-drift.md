@@ -1286,6 +1286,8 @@ thing being measured.
 
 ### If compensation is built (design held ready)
 
+> Built 2026-09-16 as designed — see [Compensation built](#compensation-built-2026-09-16).
+
 `settimeofday()` at each HP wake, placed right after `boot_count++` so every
 consumer — crash breadcrumb, `update_hourly_history()`, the 04:00 clear
 schedule, the rendered `%H:%M` — sees one consistent clock. Correcting via
@@ -1305,6 +1307,35 @@ Note the RTC constraint: on the ESP32-E only **60 bytes** separate the app's
 RTC sections from `ULP_DATA_BASE` (the build prints the headroom every time —
 see `scripts/post_build_check_rtc.py`). Per-sample covariate arrays would not
 fit today without raising the base.
+
+## Compensation built (2026-09-16)
+
+`DRIFT_COMPENSATION`, a rig flag, on the FireBeetle rig only. The C6 rigs stay
+uncorrected: phase 2 found their rate wanders ±50–100% with no correlate.
+
+How it works, all in `src/Thermometer.cpp`:
+
+| step | where | what |
+|---|---|---|
+| apply | every HP wake, right after `boot_count++` | `settimeofday()` steps the clock back by `elapsed × ppm / (1e6 + ppm)` since the last anchor |
+| anchor | every clock set: boot sync, bootstrap, resync | the correction measures from here |
+| refit | after each successful resync | level = recency-weighted mean of the raw-rate ring: weight = window × `DRIFT_COMP_DECAY`^age (0.75 per sample, newest first) |
+| arm | `DRIFT_COMP_MIN_SAMPLES` (2) windows ≥ 6 h | below that, or outside ±20000 ppm, nothing is applied |
+| persist | `HistoryDriftState.drift_comp_ppm` | a reflash resumes correcting from the archived level |
+
+Once armed the resync measures the residual. The ring and the journal's `ppm`
+keep the **raw** rate (residual + applied), so the fit never chases itself
+toward zero; the journal's `drift_ms` keeps the residual, so
+`history.py dump --drift` recovers the applied level as a `comp_ppm` column and
+`driftstats.py` reports both rates. The `! DRIFT` badge fires on the residual,
+and the footer shows `c<ppm>` while armed. The adaptive interval sees the
+residual and climbs on its own.
+
+Expected on the FireBeetle, from the phase-2 numbers: residual sd ~42 ppm
+(3.6 s/day) with the widest deviation ~100 ppm (8.6 s/day), so the interval
+should settle between 7 and 16 days. The level shifts with the awake fraction
+(+5123 at 25 repaints/day, +4801 at 288), which the refit absorbs within a few
+samples. Unmeasured until the first harvest of a compensated run.
 
 ## Phase 2: the pinned-cadence run (firmware landed 2026-08-05)
 

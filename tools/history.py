@@ -52,6 +52,7 @@ REC = struct.Struct("<BBHIhhhH")
 DRIFT_REC = struct.Struct("<BBHIiihhIIHH")
 DRIFT_STATE = struct.Struct("<iiiqHBB6h6H")
 DRIFT_STATE_HASH = struct.Struct("<16s")   # appended field, parsed separately
+DRIFT_STATE_COMP = struct.Struct("<i")     # drift_comp_ppm, appended after the hash
 
 
 def crc32(buf):
@@ -211,6 +212,10 @@ class Archive:
                 raw, = DRIFT_STATE_HASH.unpack_from(
                     self.blob, d_off + DRIFT_STATE.size)
                 self.drift_state["git_hash"] = cstr(raw)
+            comp_off = d_off + DRIFT_STATE.size + DRIFT_STATE_HASH.size
+            if b["sizeof_drift_state"] >= comp_off - d_off + DRIFT_STATE_COMP.size:
+                self.drift_state["comp_ppm"], = DRIFT_STATE_COMP.unpack_from(
+                    self.blob, comp_off)
         else:
             self.drift_state = None
 
@@ -278,6 +283,9 @@ class Archive:
             wrote = (self.drift_state or {}).get("git_hash")
             if wrote:
                 out.append(f"last snapshot written by {wrote}{_git_note(wrote)}")
+            comp = (self.drift_state or {}).get("comp_ppm")
+            if comp:
+                out.append(f"drift compensation armed at {comp:+d} ppm")
         else:
             out.append("base     (none — journal only)")
         out.append(f"records  {len(self.hourly)} hourly, {len(self.samples)} "
@@ -500,7 +508,7 @@ def cmd_restore(args):
 
 DRIFT_CSV_HEADER = ["sync_time", "drift_s", "window_s", "ppm", "ambient_c",
                     "ambient_hours", "boot_count", "d_boot", "refresh_count",
-                    "d_refresh", "arm"]
+                    "d_refresh", "arm", "comp_ppm"]
 
 
 def _drift_rows(drifts, at=None):
@@ -514,6 +522,10 @@ def _drift_rows(drifts, at=None):
     build, nonzero for a pinned-cadence bench arm. It is per-record rather than
     per-archive because a reflash between arms wipes RTC but not the journal, so
     one image routinely spans several.
+
+    Under DRIFT_COMPENSATION drift_ms is the residual the resync measured and
+    ppm the raw oscillator rate (residual + applied), so `comp_ppm` is their
+    difference. Blank when the two agree to rounding, i.e. nothing was applied.
     """
     prev = None
     for d in drifts:
@@ -523,9 +535,14 @@ def _drift_rows(drifts, at=None):
         dr = d["refresh_count"] - prev["refresh_count"] if prev else ""
         amb = ("" if d["ambient_mean_x10"] == HOURLY_NO_DATA
                else d["ambient_mean_x10"] / 10.0)
+        comp = ""
+        if d["window_s"] > 0 and d["ppm"] != 0:
+            residual = round(d["drift_ms"] * 1000 / d["window_s"])
+            if abs(d["ppm"] - residual) > 1:
+                comp = d["ppm"] - residual
         yield [_iso(d["sync_time"]), d["drift_ms"] / 1000.0, d["window_s"],
                d["ppm"], amb, d["ambient_hours"], d["boot_count"], db,
-               d["refresh_count"], dr, d.get("experiment_arm", 0)]
+               d["refresh_count"], dr, d.get("experiment_arm", 0), comp]
         prev = d
 
 

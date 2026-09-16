@@ -17,6 +17,10 @@
 // LEDs enabled. A packaging gap, not a property of the board.
 #define DISABLE_LEDS
 
+// No 32k crystal: deep sleep runs on the RC oscillator at ~+5000 ppm
+// (docs/clock-drift.md), and only this rig is bad enough to need correcting.
+#define DRIFT_COMPENSATION
+
 #if !defined(IS_ULP_COCPU)
 #if !defined(ARDUINO_DFROBOT_FIREBEETLE_2_ESP32E)
 #error "rig 'firebeetle' needs a dfrobot_firebeetle2_esp32e_* env (IDF_TARGET=esp32)"

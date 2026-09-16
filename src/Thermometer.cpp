@@ -4,6 +4,7 @@
 // needed for setenv and tzset :-/
 #undef __STRICT_ANSI__
 #include "time.h"
+#include <sys/time.h>
 #include "stdlib.h"
 
 #include "esp_sleep.h"
@@ -100,7 +101,7 @@ static void usb_service_window(void);
 // RtcHistory, RTC_HISTORY_VERSION and the self_addr scheme live in
 // include/RtcHistory.h so HistoryStore.cpp can serialize the same layout.
 // Bump RTC_STATE_VERSION when changing operational state variables below.
-#define RTC_STATE_VERSION   0xDA050009
+#define RTC_STATE_VERSION   0xDA05000A
 
 // Initial min/max temperature sentinels (float).
 // Any real reading will replace these on first comparison.
@@ -328,6 +329,37 @@ RTC_DATA_ATTR int16_t drift_ppm_hist[DRIFT_PPM_HIST_SIZE] = {};
 RTC_DATA_ATTR uint16_t drift_win_min[DRIFT_PPM_HIST_SIZE] = {};  // window per rate, for weighting
 RTC_DATA_ATTR uint8_t drift_ppm_count = 0;
 
+#ifdef DRIFT_COMPENSATION
+// Clock-drift compensation, a rig option (include/rigs/): rigs that keep time
+// on the internal RC oscillator run +5000 ppm on the ESP32-E, and the resync
+// interval cannot shrink below a day to cover it (docs/clock-drift.md). The
+// rate is learned on-device from the resync ring and applied to the clock at
+// every HP wake, so the resync then measures only the residual and the
+// adaptive interval can climb.
+//
+// The level is a recency-weighted mean of the retained raw rates: each sample
+// weighs its own window (as the badge's summary does) times DRIFT_COMP_DECAY
+// per sample of age, newest first. Nothing is armed under
+// DRIFT_COMP_MIN_SAMPLES windows of at least DRIFT_MIN_WINDOW_S.
+#ifndef DRIFT_COMP_DECAY
+#define DRIFT_COMP_DECAY 0.75f
+#endif
+#ifndef DRIFT_COMP_MIN_SAMPLES
+#define DRIFT_COMP_MIN_SAMPLES 2
+#endif
+// Beyond this the estimate is not an oscillator rate; refuse rather than apply.
+#define DRIFT_COMP_MAX_PPM 20000
+// A correction spanning longer than this means the clock was stepped by
+// something other than sleep (a resync, a restore); re-anchor instead.
+#define DRIFT_COMP_MAX_SPAN_US (7LL * 86400 * 1000000)
+
+RTC_DATA_ATTR int32_t drift_comp_ppm = 0;        // rate being applied; 0 = not armed
+RTC_DATA_ATTR int64_t drift_comp_anchor_us = 0;  // clock (us) the last correction ran to
+static void drift_comp_anchor();
+static void drift_comp_apply();
+static void drift_comp_refit();
+#endif
+
 // Status flags for display error indicators
 RTC_DATA_ATTR bool wifi_ok = false;
 RTC_DATA_ATTR bool ntp_synced = false;
@@ -376,6 +408,11 @@ static void drift_state_save(HistoryDriftState *d)
   d->rsvd = 0;
   memcpy(d->drift_ppm_hist, drift_ppm_hist, sizeof(drift_ppm_hist));
   memcpy(d->drift_win_min, drift_win_min, sizeof(drift_win_min));
+#ifdef DRIFT_COMPENSATION
+  d->drift_comp_ppm = drift_comp_ppm;
+#else
+  d->drift_comp_ppm = 0;
+#endif
   // Zero first: snprintf leaves the bytes past the terminator untouched, and
   // this struct is persisted.
   memset(d->git_hash, 0, sizeof(d->git_hash));
@@ -417,6 +454,14 @@ static void drift_state_load(const HistoryDriftState *d, bool trust_clock)
     drift_win_min[drift_ppm_count] = d->drift_win_min[i];
     drift_ppm_hist[drift_ppm_count++] = d->drift_ppm_hist[i];
   }
+#ifdef DRIFT_COMPENSATION
+  // The level survives a reflash with the ring it was fitted from. The anchor
+  // does not need to: a zero anchor makes the next wake re-anchor without
+  // correcting, and corrections resume from there.
+  drift_comp_ppm = d->drift_comp_ppm;
+  if (drift_comp_ppm > DRIFT_COMP_MAX_PPM || drift_comp_ppm < -DRIFT_COMP_MAX_PPM)
+    drift_comp_ppm = 0;
+#endif
 
   if (trust_clock)
     last_sync_time = (time_t)d->last_sync_time;
@@ -809,6 +854,11 @@ DisplayStats make_display_stats()
     last_drift_ms, last_drift_window_s, last_sync_time, resync_fail_count,
     archive_fault, history_store_flash_format(),
     drift_ppm_hist, drift_win_min, drift_ppm_count,
+#ifdef DRIFT_COMPENSATION
+    drift_comp_ppm,
+#else
+    0,
+#endif
     previous_temp, min_temp_since_boot, max_temp_since_boot,
     historical_data.temp, historical_data.temp_count,
     historical_data.hourly, historical_data.hourly_count, hourly_start,
@@ -1390,6 +1440,9 @@ static void maybe_ntp_resync(time_t now)
     resync_fail_count = 0;
     if (first_boot_time == 0)
       first_boot_time = last_sync_time;
+#ifdef DRIFT_COMPENSATION
+    drift_comp_anchor();
+#endif
     next_resync_time = last_sync_time + resync_interval_s;
     LOGI("NTP bootstrap: clock set, resuming normal resyncs");
     // No drift to measure: the clock was wrong by an unknown amount, not
@@ -1438,6 +1491,9 @@ static void maybe_ntp_resync(time_t now)
 
   time_t after_sync;
   time(&after_sync);
+#ifdef DRIFT_COMPENSATION
+  drift_comp_anchor();
+#endif
 
   // Window the drift accumulated over: since the clock was last *set* (boot
   // sync or a previous successful resync), not since the last attempt. Failed
@@ -1457,6 +1513,15 @@ static void maybe_ntp_resync(time_t now)
   if (last_drift_window_s >= DRIFT_MIN_WINDOW_S)
   {
     int32_t ppm = (int32_t)((last_drift_ms * 1000LL) / last_drift_window_s);
+#ifdef DRIFT_COMPENSATION
+    // With a correction armed the resync measured the residual; the ring keeps
+    // the raw oscillator rate so the fit does not chase itself toward zero.
+    // The journal stores the residual in drift_ms and the raw rate in ppm, so
+    // the host can recover the applied level from the two.
+    LOGI("Drift comp: residual %d ppm + applied %d ppm = raw %d ppm",
+         (int)ppm, (int)drift_comp_ppm, (int)(ppm + drift_comp_ppm));
+    ppm += drift_comp_ppm;
+#endif
     ppm = (ppm > 32767) ? 32767 : (ppm < -32768 ? -32768 : ppm);
     int32_t win_min = last_drift_window_s / 60;
     if (win_min > 65535) win_min = 65535;  // saturates at 45 days
@@ -1496,6 +1561,11 @@ static void maybe_ntp_resync(time_t now)
     s.ambient_mean_x10 = window_mean_ambient_x10(last_drift_window_s, &s.ambient_hours);
     history_store_append_drift(&s);
   }
+#ifdef DRIFT_COMPENSATION
+  drift_comp_refit();
+  LOGI("Drift comp: level now %d ppm from %u samples", (int)drift_comp_ppm,
+       (unsigned)drift_ppm_count);
+#endif
   history_store_mark_base_dirty();
 
   resync_fail_count = 0;
@@ -1981,6 +2051,10 @@ void on_first_boot()
   ntp_synced = time_is_plausible(first_boot_time);
   if (ntp_synced && last_sync_time == 0)
     last_sync_time = first_boot_time;   // a value restored from flash wins
+#ifdef DRIFT_COMPENSATION
+  if (ntp_synced)
+    drift_comp_anchor();
+#endif
   if (!synced)
     LOGI("NTP sync failed — %s", ntp_synced
              ? "RTC clock is still plausible, keeping it"
@@ -2578,6 +2652,74 @@ static void ppk2_selftest()
 }
 #endif
 
+#ifdef DRIFT_COMPENSATION
+static int64_t clock_now_us()
+{
+  struct timeval tv;
+  gettimeofday(&tv, nullptr);
+  return (int64_t)tv.tv_sec * 1000000LL + tv.tv_usec;
+}
+
+// Call whenever the clock has just been set from a reference: corrections
+// measure from here.
+static void drift_comp_anchor()
+{
+  drift_comp_anchor_us = clock_now_us();
+}
+
+// Step the clock back by what the oscillator gained since the anchor. The
+// clock measured E = T * (1 + p) over true time T, so T - E = -E * p / (1 + p).
+// Runs once per HP wake before anything reads the time, so every consumer of
+// this trip sees one clock.
+static void drift_comp_apply()
+{
+  if (!ntp_synced)
+    return;
+  int64_t now_us = clock_now_us();
+  int64_t elapsed = now_us - drift_comp_anchor_us;
+  if (drift_comp_ppm == 0 || drift_comp_anchor_us == 0 || elapsed <= 0 ||
+      elapsed > DRIFT_COMP_MAX_SPAN_US)
+  {
+    drift_comp_anchor_us = now_us;
+    return;
+  }
+  int64_t corr = -(elapsed * drift_comp_ppm) / (1000000LL + drift_comp_ppm);
+  int64_t set_us = now_us + corr;
+  struct timeval tv;
+  tv.tv_sec = (time_t)(set_us / 1000000LL);
+  tv.tv_usec = (suseconds_t)(set_us % 1000000LL);
+  settimeofday(&tv, nullptr);
+  drift_comp_anchor_us = set_us;
+  LOGI("Drift comp: %d ppm over %lld ms, clock stepped %lld ms",
+       (int)drift_comp_ppm, (long long)(elapsed / 1000), (long long)(corr / 1000));
+}
+
+// Refit the level from the raw-rate ring after a resync has appended to it.
+static void drift_comp_refit()
+{
+  if (drift_ppm_count < DRIFT_COMP_MIN_SAMPLES)
+  {
+    drift_comp_ppm = 0;
+    return;
+  }
+  float w = 1.0f, sum = 0.0f, wsum = 0.0f;
+  for (int i = drift_ppm_count - 1; i >= 0; i--)
+  {
+    float wi = w * drift_win_min[i];
+    sum += wi * drift_ppm_hist[i];
+    wsum += wi;
+    w *= DRIFT_COMP_DECAY;
+  }
+  int32_t est = (int32_t)lroundf(sum / wsum);
+  if (est > DRIFT_COMP_MAX_PPM || est < -DRIFT_COMP_MAX_PPM)
+  {
+    LOGI("Drift comp: estimate %d ppm out of range, disarmed", (int)est);
+    est = 0;
+  }
+  drift_comp_ppm = est;
+}
+#endif
+
 // What every trip through the high-power path opens with. A real wake inherits
 // part of this from the boot — statics come up zeroed — but a parked cycle runs
 // inside one boot and has to be explicit, so both paths call the same thing
@@ -2590,6 +2732,10 @@ static void begin_wake_cycle(void)
   // panel reports all key off it.
   boot_count++;
   crash_log.cur_boot_count = boot_count;
+
+#ifdef DRIFT_COMPENSATION
+  drift_comp_apply();
+#endif
 
   // Per-trip, not per-boot: "the coprocessor handed up a reading we could not
   // use". Latched across the cycles of a parked session it would reload the

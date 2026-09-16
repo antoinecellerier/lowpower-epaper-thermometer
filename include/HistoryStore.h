@@ -80,6 +80,10 @@ struct __attribute__((packed)) HistoryDriftState {
   // with a size descriptor and zero-fill on short reads, so appending here does
   // not bump HS_FORMAT. Empty on snapshots written before this field existed.
   char     git_hash[16];
+  // Rate DRIFT_COMPENSATION is applying, so a reflash resumes correcting at once
+  // instead of waiting DRIFT_COMP_MIN_SAMPLES resyncs. Appended after git_hash
+  // for the same zero-fill reason; 0 on older snapshots and on rigs without it.
+  int32_t  drift_comp_ppm;
 };
 
 // One clock-drift observation, journaled per successful resync (<=1/day).

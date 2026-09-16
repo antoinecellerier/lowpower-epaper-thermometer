@@ -166,6 +166,7 @@ int main(int argc, char **argv)
   g_drift.drift_ppm_count = 2;
   g_drift.drift_ppm_hist[0] = -5265;
   g_drift.drift_ppm_hist[1] = -5100;
+  g_drift.drift_comp_ppm = -5250;
 
   history_store_mark_base_dirty();
   history_store_flush(&g_hist, &g_drift, T0 + 50 * 3600);
@@ -183,6 +184,7 @@ int main(int argc, char **argv)
         got.temp_count, saved.temp_count);
   CHECK(memcmp(got.temp, saved.temp, sizeof(got.temp)) == 0, "sparkline differs");
   CHECK(gotd.drift_ppm_hist[0] == -5265 && gotd.drift_ppm_count == 2, "drift block lost");
+  CHECK(gotd.drift_comp_ppm == -5250, "drift_comp_ppm lost");
   CHECK(gotd.last_sync_time == T0, "last_sync_time lost");
 
   // ---- 3. records written after the base are replayed, not double-applied ----
@@ -642,13 +644,14 @@ int main(int argc, char **argv)
     g_drift.last_sync_time = T0;
     g_drift.drift_ppm_count = 1;
     g_drift.drift_ppm_hist[0] = -5265;
+    g_drift.drift_comp_ppm = -5250;   // exercises the decoder's "armed" line
     history_store_mark_base_dirty();
     history_store_flush(&g_hist, &g_drift, T0 + 40 * 3600);
     HistoryDriftSample ds = {};
     ds.sync_time = T0 + 40 * 3600;
     ds.drift_ms = -9559000;
     ds.window_s = 1814400;
-    ds.ppm = -5265;
+    ds.ppm = -5268;   // = drift_ms * 1000 / window_s, or it decodes as compensation
     ds.ambient_mean_x10 = 213;
     ds.ambient_hours = 40;
     ds.boot_count = 847;

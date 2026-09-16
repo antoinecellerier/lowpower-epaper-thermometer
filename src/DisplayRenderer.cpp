@@ -1061,6 +1061,10 @@ static void build_footer_text(char *out, size_t n, time_t now,
     footer_append(out, n, &pos, " e%u", (unsigned)stats.lp_error_count);
   if (stats.ulp_reinit_count > 1)
     footer_append(out, n, &pos, " u%u", (unsigned)stats.ulp_reinit_count);
+  // A working correction hides its own drift; this says it is armed and by how
+  // much (ppm, sign as the raw rate: positive = the oscillator runs fast).
+  if (stats.drift_comp_ppm != 0)
+    footer_append(out, n, &pos, " c%+d", (int)stats.drift_comp_ppm);
   footer_append(out, n, &pos, " %s w:%s mx%.1fV",
                 uptime_str, wake_str, stats.max_battery_mv / 1000.0f);
   if (stats.bad_pin27_count > 0)

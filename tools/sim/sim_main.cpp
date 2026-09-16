@@ -195,6 +195,7 @@ int main(int argc, char **argv)
     drift_stats.drift_ppm_hist = drift_ppm;
     drift_stats.drift_win_min = drift_win;
     drift_stats.drift_ppm_count = 4;
+    drift_stats.drift_comp_ppm = -5250;
     render_dashboard(canvas, cfg.w, cfg.h,
                       22.3f, 3842, false,
                       now, &nowtm, drift_stats);

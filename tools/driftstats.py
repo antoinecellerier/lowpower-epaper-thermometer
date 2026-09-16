@@ -8,7 +8,9 @@ archive image rather than by hand:
     driftstats.py hist.bin --arm 0                # the pre-experiment subset
 
 Rate = total drift / total window (window-weighted); +-N% = widest single
-deviation from it. Records with a window under DRIFT_MIN_WINDOW_S (6h) are
+deviation from it. On a DRIFT_COMPENSATION archive that rate is the residual
+the resync measured; the raw oscillator rate is reported alongside from the
+ppm column. Records with a window under DRIFT_MIN_WINDOW_S (6h) are
 dropped, as on the device. Per-window covariates come from the same record
 (boot/refresh deltas, mean ambient) plus the hourly rows the window covers
 (intra-hour spread = mean of max-min). Correlations are Pearson unless
@@ -44,7 +46,7 @@ def covariates(rows, hourly):
     t0 = rows[0][0]
     out = []
     for r in rows:
-        sync, drift_s, win, ppm, amb, _, _, db, _, dr, _ = r
+        sync, drift_s, win, ppm, amb, _, _, db, _, dr = r[:10]
         days = win / 86400.0
         t = dt.datetime.strptime(sync, "%Y-%m-%d %H:%M:%SZ").replace(
             tzinfo=dt.timezone.utc).timestamp()
@@ -109,6 +111,13 @@ def main():
     print(f"n={len(cov)}  observed {win/86400:.2f}d  drift {drift:+.0f}s  "
           f"rate {rate:+.1f}ppm  range {ppm.min():+.0f}..{ppm.max():+.0f}  "
           f"+-{widest:.1f}%  sd {ppm.std():.1f}ppm")
+    comp = [r[11] for r in rows if r[11] != ""]
+    if comp:
+        raw = np.array([r[3] for r in rows], float)
+        wts = np.array([r[2] for r in rows], float)
+        print(f"compensated: applied {min(comp):+d}..{max(comp):+d}ppm on {len(comp)} "
+              f"records; the rate above is the residual, raw oscillator rate "
+              f"{np.sum(raw * wts) / wts.sum():+.1f}ppm window-weighted")
     if a.interval:
         fails = sum(round(c["window_s"] / a.interval) - 1 for c in cov)
         print(f"failed attempts {fails} across {len(cov)} successes "

@@ -64,6 +64,13 @@
 // the whole signal. C6 boards only, for the vendoring reason above.
 //#define DISABLE_LEDS
 
+// Learn the RC oscillator's rate from the resync ring and correct the clock at
+// every wake, so the resync interval can climb off its 1-day floor. For rigs
+// without a 32k crystal whose rate is stable to a few percent — the ESP32-E
+// qualifies, the C6 boards do not (docs/clock-drift.md, phase 2). Footer shows
+// `c<ppm>` while armed.
+//#define DRIFT_COMPENSATION
+
 // Bench knobs are NOT rig properties — pass them as build flags instead:
 // DISABLE_SERIAL (already in [release]), DISABLE_WIFI, NO_ULP, MOCK_DISPLAY_DATA.
 
