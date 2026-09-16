@@ -17,6 +17,7 @@ conditions. Style for everything here: `.claude/rules/docs-style.md`.
 | [sim-fidelity-todo.md](sim-fidelity-todo.md) | Gaps between `tools/sim` and the device renderer | open items |
 | [captures/](captures/) | PPK2 screenshots cited from `notes.md` | evidence |
 | [photos/](photos/) | Prototype and rev A board photos | evidence |
+| [../hardware/datasheets/](../hardware/datasheets/README.md) | Panel and carrier vendor PDFs, panel readback findings | reference |
 
 ## Archive
 

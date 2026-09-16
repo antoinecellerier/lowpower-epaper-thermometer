@@ -180,8 +180,8 @@ BOOT
 
 Researched 2026-07-04 from the Seeed
 [wiki](https://wiki.seeedstudio.com/xiao_eink_expansion_board_v2/), its schematic
-(`hardware/Seeed ePaper Driver Board for XIAO SCH v1.0.pdf`) and the DESPI-C02
-spec (`hardware/DESPI-C02 Connector Board for E-paper Display V1.1.pdf`). The
+(`hardware/datasheets/Seeed ePaper Driver Board for XIAO SCH v1.0.pdf`) and the DESPI-C02
+spec (`hardware/datasheets/DESPI-C02 Connector Board for E-paper Display V1.1.pdf`). The
 Seeed board copies Good Display's reference booster; Seeed's own panels are
 rebranded GD units.
 

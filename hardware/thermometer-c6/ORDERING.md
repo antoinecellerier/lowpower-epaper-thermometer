@@ -254,7 +254,8 @@ JLC's part API — the BOM dialog is still ground truth at order time):
 ## 6. Rotation/polarity verification (MANDATORY)
 
 - [ ] In JLC's component-placement preview, walk `out/fab/rotation-checklist.md`
-      row by row (22 orientation-critical parts). **The preview is ground
+      row by row (22 orientation-critical parts; the 2026-07-20 copy is
+      [`archive/order-2026-07-20/rotation-checklist.md`](archive/order-2026-07-20/rotation-checklist.md)). **The preview is ground
       truth** — the correction table in `generator/fab_cpl.py` is a first guess,
       and the SOT-23 family carries a known community-table conflict.
 - [ ] On a mismatch: adjust the part's delta in `fab_cpl.py`, mark the entry

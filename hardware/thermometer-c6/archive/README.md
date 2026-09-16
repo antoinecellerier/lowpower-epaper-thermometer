@@ -285,8 +285,9 @@ what was physically built, so nothing here is regenerated — `make fab` at any
 later commit produces a different stamp and would not describe these boards.
 
 Two subdirectories were added after this section was first written, both with
-their own READMEs: `jlc-production-files/` (JLC's CAM output and SMT previews,
-plus the independent 75-placement verification) and `xray/` (the first-article
+their own READMEs: [`jlc-production-files/`](order-2026-07-20/jlc-production-files/README.md)
+(JLC's CAM output and SMT previews, plus the independent 75-placement
+verification) and [`xray/`](order-2026-07-20/xray/README.md) (the first-article
 X-ray frames and the script that annotates them).
 
 - `thermometer-c6-gerbers-3ed40fe-2026-07-20.zip` — 12 members (9 gerbers +

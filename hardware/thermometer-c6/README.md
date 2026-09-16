@@ -7,6 +7,22 @@ charging, LDO power tree. Design driven by the PPK2 measurement campaign in
 
 ![Thermometer C6 rev A board & GDEM0154I61 (2026)](../../docs/photos/revA-GDEM0154I61.jpg)
 
+## Docs in this directory
+
+| Doc | What it is | Status |
+|---|---|---|
+| [BRINGUP.md](BRINGUP.md) | Bench queue and per-board state for rev A | live |
+| [ORDERING.md](ORDERING.md) | Fab and assembly options, the JLCPCB order walk, quote history | procedure |
+| [HAND-ROUTING.md](HAND-ROUTING.md) | Copper edits in the KiCad GUI, harvested back into the generator | procedure |
+| [EE-PRIMER.md](EE-PRIMER.md) | Field guide to the schematic's symbols and idioms, by designator | background |
+| [SCHEMATIC-VERIFICATION.md](SCHEMATIC-VERIFICATION.md) | Rev A pre-order schematic sign-off, 2026-07-20 | record |
+| [REVIEW-KICAD-HAPPY.md](REVIEW-KICAD-HAPPY.md) | kicad-happy design review runs, 2026-07-17 and 2026-07-20 | record |
+| [LAYOUT-PLAN.md](LAYOUT-PLAN.md) | How the layout was planned and decided, up to the 2026-07-20 order | historical |
+| [ROUTER-NOTES.md](ROUTER-NOTES.md) | The retired greedy A* router | historical |
+| [PATHFINDER-NOTES.md](PATHFINDER-NOTES.md) | Negotiated-congestion router experiment, not adopted | historical |
+| [archive/](archive/README.md) | Hand-routed snapshots, the 2026-07-20 order as uploaded, worktree patches | record |
+| [../datasheets/](../datasheets/README.md) | Panel and carrier vendor PDFs, panel readback findings | reference |
+
 **Status: rev A built and working.** Ordered 2026-07-20
 ([`archive/order-2026-07-20/`](archive/order-2026-07-20/); landed €273.93 ≈
 €68.50/assembled board, breakdown in [`ORDERING.md`](ORDERING.md)). Board 1
@@ -48,7 +64,7 @@ against primary sources, findings + dispositions):
 
 ## Reference transcription: DESPI-C02 V1.0 (Good Display, 2018-07-06)
 
-Transcribed from `hardware/DESPI-C02_SCH V1.0.pdf` (visual + embedded netlist),
+Transcribed from `hardware/datasheets/DESPI-C02_SCH V1.0.pdf` (visual + embedded netlist),
 2026-07-07. This is the booster we replicate (with EPD_VCC gating added).
 
 ### 24-pin 0.5mm FPC panel pinout (P1, "FPC24(0.5MM)")

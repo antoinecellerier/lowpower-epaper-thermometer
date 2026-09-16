@@ -1,11 +1,22 @@
-# Panel datasheets
+# Datasheets and vendor schematics
 
-Module- and controller-level docs for the e-paper panels the rigs drive. They
-live here rather than under `../thermometer-c6/` because the panels are shared
-across every rig — FireBeetle, XIAO, the Seeed hat and the custom board. That
-board keeps its own parts' datasheets beside it, but **untracked** — including
-the SSD1677 doc referenced below, which is not in the repo and has to be fetched
-again from Solomon Systech.
+Vendor PDFs for every panel and carrier board a rig uses. They live here
+rather than under `../thermometer-c6/` because the panels and carriers are
+shared across every rig — FireBeetle, XIAO, the Seeed hat and the custom
+board. That board keeps its own parts' datasheets beside it, but **untracked**
+— including the SSD1677 doc referenced below, which is not in the repo and has
+to be fetched again from Solomon Systech.
+
+## Carrier boards
+
+| File | What | Rig |
+|---|---|---|
+| `DESPI-C02 Connector Board for E-paper Display V1.1.pdf` | Good Display DESPI-C02 adapter spec | the DESPI-C02 rigs (`firebeetle`, `xiao-bigscreen`) |
+| `DESPI-C02_SCH V1.0.pdf` | DESPI-C02 schematic; transcribed in [`../thermometer-c6/README.md`](../thermometer-c6/README.md) | same |
+| `Seeed ePaper Driver Board for XIAO SCH v1.0.pdf` | Seeed XIAO ePaper driver board schematic | `xiao-hat` |
+| `XIAO ESP32-C6 v1.0 SCH.pdf` | Seeed XIAO ESP32-C6 schematic | every XIAO rig |
+
+## Panels
 
 | File | Panel | Controller | Rig |
 |---|---|---|---|

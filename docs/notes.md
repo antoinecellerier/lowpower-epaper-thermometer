@@ -524,7 +524,7 @@ comparator edge is at 3.545 ± 0.005 V.
 
 Conditions: same rig, PPK2 as battery on the XIAO's underside BAT pads, shield
 JST empty, switch off. From the XIAO C6 v1.0 schematic
-(`hardware/XIAO ESP32-C6 v1.0 SCH.pdf`): the 3.3 V rail is a SGM6029C
+(`hardware/datasheets/XIAO ESP32-C6 v1.0 SCH.pdf`): the 3.3 V rail is a SGM6029C
 synchronous buck (0.47 µH), not an LDO; VBAT feeds it through a LP0404N3 P-FET
 power path, VBUS through a Schottky; the charger is a separate SGM40567-4.2
 (120 mA).

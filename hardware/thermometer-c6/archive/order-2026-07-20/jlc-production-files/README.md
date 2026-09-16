@@ -9,6 +9,8 @@ for the rev A `3ed40fe` bundle uploaded 2026-07-20.
   (`YG/4te.json`, GBK-encoded), and two nested copies of the customer
   upload (`YG/*.zip`) which are **byte-identical** to
   `../thermometer-c6-gerbers-3ed40fe-2026-07-20.zip` (verified per file).
+- [`placement-verification-2026-07-22.md`](placement-verification-2026-07-22.md)
+  — the independent 75-placement walk of those renders.
 - `smt-preview-*.png` — JLC's panelized 2D assembly renders (top/bottom,
   with and without designator overlay). Render color is JLC's generic
   green; the ordered finish is white mask / black silk (deliberate, see
