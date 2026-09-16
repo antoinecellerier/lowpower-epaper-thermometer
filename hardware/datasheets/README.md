@@ -11,20 +11,20 @@ to be fetched again from Solomon Systech.
 
 | File | What | Rig |
 |---|---|---|
-| `DESPI-C02 Connector Board for E-paper Display V1.1.pdf` | Good Display DESPI-C02 adapter spec | the DESPI-C02 rigs (`firebeetle`, `xiao-bigscreen`) |
-| `DESPI-C02_SCH V1.0.pdf` | DESPI-C02 schematic; transcribed in [`../thermometer-c6/README.md`](../thermometer-c6/README.md) | same |
-| `Seeed ePaper Driver Board for XIAO SCH v1.0.pdf` | Seeed XIAO ePaper driver board schematic | `xiao-hat` |
-| `XIAO ESP32-C6 v1.0 SCH.pdf` | Seeed XIAO ESP32-C6 schematic | every XIAO rig |
+| [`DESPI-C02 Connector Board for E-paper Display V1.1.pdf`](DESPI-C02%20Connector%20Board%20for%20E-paper%20Display%20V1.1.pdf) | Good Display DESPI-C02 adapter spec | the DESPI-C02 rigs (`firebeetle`, `xiao-bigscreen`) |
+| [`DESPI-C02_SCH V1.0.pdf`](DESPI-C02_SCH%20V1.0.pdf) | DESPI-C02 schematic; transcribed in [`../thermometer-c6/README.md`](../thermometer-c6/README.md) | same |
+| [`Seeed ePaper Driver Board for XIAO SCH v1.0.pdf`](Seeed%20ePaper%20Driver%20Board%20for%20XIAO%20SCH%20v1.0.pdf) | Seeed XIAO ePaper driver board schematic | `xiao-hat` |
+| [`XIAO ESP32-C6 v1.0 SCH.pdf`](XIAO%20ESP32-C6%20v1.0%20SCH.pdf) | Seeed XIAO ESP32-C6 schematic | every XIAO rig |
 
 ## Panels
 
 | File | Panel | Controller | Rig |
 |---|---|---|---|
-| `GDEH0154Z90.pdf` | 200x200 tri-colour | SSD1681 | `firebeetle` |
-| `GDEY0213M21.pdf` | 212x104 (as GDEW0213M21) | UC8151D | `revA-213m21` bench spare |
-| `GDEW029I6FD.pdf` | 296x128 flexible | UC8151D | `xiao-hat` |
-| `GDEH0576T81.pdf` | 920x680 | SSD2677 | `revA-bigscreen`, `xiao-bigscreen` |
-| `UC8151D.pdf` | — | UC8151D chip-level | the two UC8151 panels above |
+| [`GDEH0154Z90.pdf`](GDEH0154Z90.pdf) | 200x200 tri-colour | SSD1681 | `firebeetle` |
+| [`GDEY0213M21.pdf`](GDEY0213M21.pdf) | 212x104 (as GDEW0213M21) | UC8151D | `revA-213m21` bench spare |
+| [`GDEW029I6FD.pdf`](GDEW029I6FD.pdf) | 296x128 flexible | UC8151D | `xiao-hat` |
+| [`GDEH0576T81.pdf`](GDEH0576T81.pdf) | 920x680 | SSD2677 | `revA-bigscreen`, `xiao-bigscreen` |
+| [`UC8151D.pdf`](UC8151D.pdf) | — | UC8151D chip-level | the two UC8151 panels above |
 
 No chip-level SSD2677 doc. The SSD1677 datasheet is a relative, not the part;
 taking its chip pinout as the module's cost a wrong conclusion once (below).
