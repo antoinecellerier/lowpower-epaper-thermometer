@@ -341,6 +341,16 @@ average of the wrong thing. These are the specific ways it happened here.
   D1 preamble to every archive persist — 300 ms of awake time, ~4–6 mC per wake.
   Compare debug figures only with debug figures, and prefer a production build for
   anything that ships in the budget.
+- **`CPU_ACTIVE` is a lower bound.** The marker rises after the ROM and IDF
+  preamble (~45 ms unmarked since `f07d2c9`, 445 ms before it), so a
+  marker-bounded wake omits that much; bracket with `--from/--to` when the
+  preamble matters.
+- **The ±0.7 µA fuzz on a sleep floor at 100 ksps is PPK2 low-range noise.**
+  Quote the window average. Fabric versus open air under the board changed
+  nothing beyond the post-wake transient.
+- **Near a suspected voltage edge, step 100 mV at a time, not a sparse `--mv`
+  list.** One bistable step on a sparse list anchored a bisect six probes deep
+  into a range that re-ran healthy six times (board 2 SEL_3 run 1, `docs/notes.md`).
 - **Before naming a cause, check whether the suspect was present in the
   counter-example.** Digital-probe leakage, the shield's ETA9740 and the
   acquisition path were each proposed as the cause of an elevated floor, and each
