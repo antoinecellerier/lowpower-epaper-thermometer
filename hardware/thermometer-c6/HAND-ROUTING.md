@@ -107,8 +107,9 @@ hand_diff must exit 0 (fully mirrored) before step 5's gate.
   fanout, booster core, NE-gate copper, EPD_VCC spine) orphans that copper
   and it must be re-authored. Cheapest tweaks are in the all-A* west/center
   signal field; the east side is expensive.
-- Known negative result: moving C10/R9 does NOT free `XTAL_32K_P` — its box
-  is +3V3's authored elbow (PATHFINDER-NOTES Stage-2 acid test).
+- Known negative result: moving C10/R9 does NOT free `XTAL_32K_P`;
+  [PATHFINDER-NOTES Stage 2](PATHFINDER-NOTES.md#stage-2-movable-authored-copper--feasibility-proven)
+  holds the acid test.
 
 ## 5. Gate every iteration
 
@@ -120,8 +121,7 @@ python3 verify/check_pcb.py            # trunk width, keep-out intersects
 ```
 
 Unconnected items must be GND-only (the M6 pour owns GND). Beware stale
-`out/drc.json` — regenerate before reading it. (`make route` is retired:
-it aborts on the HAND_ROUTED sentinel.)
+`out/drc.json` — regenerate before reading it.
 
 ## 6. Commit
 
