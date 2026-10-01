@@ -874,11 +874,47 @@ def run_selftest():
     return 1 if failed else 0
 
 
+# --- Capture files ---------------------------------------------------------
+
+# Archived captures are kept zstd-compressed (`zstd -19 --long`, ~7x on both raw
+# and CSV); every reader takes either form, so there is no decompress step.
+ZST = ".zst"
+
+
+def _open_capture(path, mode="rb"):
+    if path.endswith(ZST):
+        from compression import zstd
+        return zstd.open(path, mode)
+    return open(path, mode)
+
+
+def _capture_base(path):
+    """The uncompressed name, which keys the sidecar and the decode caches."""
+    return path[:-len(ZST)] if path.endswith(ZST) else path
+
+
+def _capture_size(path):
+    """Uncompressed size in bytes."""
+    if not path.endswith(ZST):
+        return os.path.getsize(path)
+    from compression import zstd
+    with open(path, "rb") as fh:
+        head = fh.read(18)  # ZSTD_FRAMEHEADERSIZE_MAX
+    size = zstd.get_frame_info(head).decompressed_size
+    if size is not None:
+        return size
+    size = 0
+    with _open_capture(path) as fh:
+        while b := fh.read(16 << 20):
+            size += len(b)
+    return size
+
+
 # --- CSV source ------------------------------------------------------------
 
 def load_csv(path, verbose=True):
     """Read a Power Profiler CSV, sniffing the header rather than assuming it."""
-    with open(path) as fh:
+    with _open_capture(path, "rt") as fh:
         header = next(csv.reader([fh.readline()]))
         cols = [h.strip() for h in header]
 
@@ -1445,7 +1481,8 @@ class _NpDecoder:
 def _cache_paths(raw_path, n):
     # v2: caches written before the per-channel majority fix hold digital data
     # with all eight channels collapsed into bit 0, so they must not be reused.
-    return f"{raw_path}.dec{n}.v2.f32", f"{raw_path}.dec{n}.v2.d8"
+    base = _capture_base(raw_path)
+    return f"{base}.dec{n}.v2.f32", f"{base}.dec{n}.v2.d8"
 
 
 def _cache_write(raw_path, n, samples, digital_raw):
@@ -1506,7 +1543,7 @@ def decode_raw(args):
     # so the reward for surviving was a ten-minute re-decode of data already on
     # disk. File size is exact here (4 bytes/sample), where the capture path can
     # only estimate from --seconds.
-    dec_n = _choose_decimation(os.path.getsize(args.path) // 4, args.decimate)
+    dec_n = _choose_decimation(_capture_size(args.path) // 4, args.decimate)
 
     cached = _cache_read(args.path, dec_n)
     if cached is not None:
@@ -1516,7 +1553,7 @@ def decode_raw(args):
               + (f", decimated {dec_n}x" if dec_n > 1 else ""))
         return _trace_from_samples(samples, digital_raw, None, dt)
 
-    side = args.path + ".json"
+    side = _capture_base(args.path) + ".json"
     if os.path.exists(side):
         with open(side) as fh:
             meta = json.load(fh)
@@ -1539,7 +1576,7 @@ def decode_raw(args):
     # 16 MB rather than 1: the vectorized path pays a fixed numpy overhead per
     # call, and the intermediates are a handful of float64 arrays over 4M
     # samples, so the working set stays well under the decimated result.
-    with open(args.path, "rb") as fh:
+    with _open_capture(args.path) as fh:
         while True:
             b = fh.read(16 << 20)
             if not b:
@@ -2102,7 +2139,7 @@ def _run_step(ppk, args, mv, dec_n, out_dir, seq, phase):
 
 def _classify_file(args):
     path = args.classify_file
-    if path.endswith(".csv"):
+    if _capture_base(path).endswith(".csv"):
         tr = load_csv(path)
     else:
         ns = argparse.Namespace(path=path, port=args.port, vdd=args.vin,

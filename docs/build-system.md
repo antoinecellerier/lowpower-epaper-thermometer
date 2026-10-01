@@ -86,7 +86,7 @@ Everything the tools pull off a device lives under a single gitignored `local/`:
 |---|---|---|
 | `local/sweeps/` | `ppk2.py sweep` | one dir per run: raw captures, `report.md`, `summary.json` |
 | `local/archives/` | `history.py backup` | `hist-<board>-<mac>-<date>.bin` partition images |
-| `local/captures/` | `ppk2.py live --out/--raw-out`, Power Profiler exports | `ppk-*.csv`, raw bins |
+| `local/captures/` | `ppk2.py live --out/--raw-out`, Power Profiler exports | `ppk-*.csv`, raw bins; archive with `zstd -19 --long`, `ppk2.py` reads `.zst` directly |
 | `local/scratch/` | by hand | ad-hoc bench files |
 
 `tools/artifacts.py` resolves the root from the repo, **not from the CWD**, so an
