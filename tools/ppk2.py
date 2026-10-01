@@ -2165,7 +2165,8 @@ def _replay_dir(args):
     plan. The bisect is not replayable at all — it needs the hardware — so the
     edge here is only what the steps on disk bracket.
     """
-    names = sorted(n for n in os.listdir(args.replay) if n.endswith("mv.bin"))
+    names = sorted(n for n in os.listdir(args.replay)
+                   if _capture_base(n).endswith("mv.bin"))
     if not names:
         sys.exit(f"no step-*.bin captures in {args.replay!r}")
     live = {}
@@ -2184,7 +2185,8 @@ def _replay_dir(args):
     steps = []
     for name in names:
         path = os.path.join(args.replay, name)
-        with open(path + ".json") as fh:
+        name = _capture_base(name)
+        with open(_capture_base(path) + ".json") as fh:
             side = json.load(fh)
         cfg = side.get("sweep")
         if cfg is None:
