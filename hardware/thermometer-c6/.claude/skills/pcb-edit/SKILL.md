@@ -4,9 +4,10 @@ description: >-
   Changing the thermometer-c6 PCB and getting it past the gate — what DRC
   actually enforces, the geometry traps that make a clearance read wrong, pcbnew
   scripting conventions, the two rendering instabilities that produce phantom
-  results, and the verify/ tool index. Use when editing generator/pcb_layout.py
-  or pcb_routes.py, harvesting a GUI hand-routing pass, chasing a DRC violation,
-  or writing ad-hoc pcbnew.
+  results, the verify/ tool index, and how to prove a part's geometry. Use when
+  editing generator/pcb_layout.py or pcb_routes.py, harvesting a GUI
+  hand-routing pass, chasing a DRC violation, writing ad-hoc pcbnew, or
+  verifying a footprint, orientation, pin 1 or placement datum.
 ---
 
 # Editing the board
@@ -138,3 +139,36 @@ origins and sizes from `layout.ZONES`) reviews a schematic change, not a silk or
 placement one.
 
 Either way: a render you have not looked at is not a review.
+
+## Proving a part's geometry
+
+A claim about a land pattern, a part's orientation, pin 1 or a placement datum
+ships a proof directory, `archive/proofs/<ref>-<topic>/` (`j3-datum`,
+`j4-proof`). Start it there, not in `out/`: the code and docs that act on the
+claim cite it, and `out/` is gitignored.
+
+- **`VERDICT.md`**: the claim and the result first, then each number with the
+  datum it is measured from.
+- **Scripts** that produce every number, run from the board directory with
+  relative paths. Reference `local.3dmodels/` and `datasheets/`, don't copy
+  them.
+- **An annotated image per claim**: the real part (STEP projection or KiCad 3D
+  render) or the vendor drawing, overlaid with copper taken from the board file,
+  with pin 1, the mouth and the datum labelled and the measured dimensions drawn
+  on. A plain render doesn't count. J3's render looked right because its model
+  sat 180° off the copper.
+- **Independent sources checked separately**: STEP, vendor drawing, board
+  copper. The claim holds when they agree. Record any disagreement in the
+  verdict.
+
+Then add a row to `archive/proofs/README.md` and cite the path from every
+generator comment, check and doc that encodes the result.
+
+Techniques that worked here:
+- Isolating contacts in a STEP by their gold colour (`j4-proof/` part A).
+- Bounding boxes from face vertices only (`j3-land/` §7).
+- Parsing the datasheet's vector content stream, cross-checked by raster
+  (`j3-datum/`).
+- Footprint bounding boxes projected onto images
+  (`archive/order-2026-07-20/xray/annotate.py`).
+- Pad-crosshair overlays on the JLC preview (`generator/fab_cpl.py`).
