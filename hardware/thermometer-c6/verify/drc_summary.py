@@ -45,10 +45,11 @@ def classify(v):
         return "WAIVED"
     # NOTE: copper_edge_clearance is REAL for every footprint including J3.
     # The old J3-scoped waiver covered the front shell pad hanging 0.105mm off
-    # the north edge, which out/j3-datum/ proved was a 1.415mm placement error
-    # (HRO's "5.79" is edge -> NPTH post centreline). Post-respin the edge web
-    # is 1.510mm and nothing is waived. A J3 edge violation now means the
-    # placement regressed -- fix the placement, do not re-add this branch.
+    # the north edge, which archive/proofs/j3-datum/ proved was a 1.415mm
+    # placement error (HRO's "5.79" is edge -> NPTH post centreline).
+    # Post-respin the edge web is 1.510mm and nothing is waived. A J3 edge
+    # violation now means the placement regressed -- fix the placement, do not
+    # re-add this branch.
     if vtype in DEFERRED:
         return "DEFERRED"
     return "REAL"

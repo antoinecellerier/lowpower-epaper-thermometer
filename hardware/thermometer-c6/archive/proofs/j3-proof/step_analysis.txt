@@ -1,0 +1,8 @@
+entities: 34478
+gold color ids: 152 grey: 322 black: 231 dgrey: 114
+=== color-associated geometry bboxes (model native coords) ===
+GOLD     n=1416   X[-4.47,3.43] Y[-5.30,9.23] Z[-0.00,1.96]
+GREY     n=3606   X[-7.04,7.04] Y[-13.44,5.20] Z[-0.89,12.31]
+BLACK    n=4607   X[-1.75,1.49] Y[0.00,1.77] Z[3.25,3.25]
+GOLD low-z (tails band z<0.40): n=696 X[-4.47,3.43] Y[-5.30,0.00] Z[-0.00,0.20]
+GOLD high-z (tips band z>1.56): n=360 X[-2.80,2.80] Y[-0.65,1.85] Z[1.95,1.96]

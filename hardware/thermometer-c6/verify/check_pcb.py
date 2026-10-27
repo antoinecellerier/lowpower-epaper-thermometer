@@ -390,9 +390,10 @@ def main():
         #     which the old test could not: the footprint shipped a 7.05mm body
         #     until 2026-07-20, because bounding-boxing raw CARTESIAN_POINTs
         #     picked up LINE / AXIS2_PLACEMENT_3D origins owning no geometry
-        #     (out/j3-land/ section 7). The mouth is now ~1.6mm inboard of the
-        #     east edge instead of flush -- fine for an FPC, the cable just
-        #     inserts deeper -- so "near the edge" is no longer the invariant.
+        #     (archive/proofs/j3-land/ section 7). The mouth is now ~1.6mm
+        #     inboard of the east edge instead of flush -- fine for an FPC, the
+        #     cable just inserts deeper -- so "near the edge" is no longer the
+        #     invariant.
         fabx = [rel(p)[0] for g in j4.GraphicalItems()
                 if g.GetLayerName() == "F.Fab" and g.GetClass().startswith("PCB_SHAPE")
                 for p in (g.GetStart(), g.GetEnd())]
@@ -417,16 +418,17 @@ def main():
     #     error that flip masked. Both are asserted against HRO's own drawing
     #     rather than against whatever the board currently says:
     #
-    #       out/j3-datum/ parsed the datasheet's vector content stream and
-    #       proved "5.79" is PCB EDGE -> NPTH POST CENTRELINE (not to the pad
-    #       row) and "4.18" is shell-slot centre to shell-slot centre. So off
-    #       the north board edge the chain is, in mm:
+    #       archive/proofs/j3-datum/ parsed the datasheet's vector content
+    #       stream and proved "5.79" is PCB EDGE -> NPTH POST CENTRELINE (not to
+    #       the pad row) and "4.18" is shell-slot centre to shell-slot centre.
+    #       So off the north board edge the chain is, in mm:
     #         front shell slot  2.11   (drawing 2.1078, HRO tol +-0.05)
     #         + 4.18 -> rear shell slot        (drawing 4.1716)
     #         + 3.65 -> NPTH plastic post      (STEP-measured post axis; the
     #                                           drawing's 3.6716 is the outlier)
-    #         + 4.925 -> SMT pad row centre    (out/j3-land land: heel 4.200
-    #                                           from the front slot + 1.45/2)
+    #         + 4.925 -> SMT pad row centre    (archive/proofs/j3-land land:
+    #                                           heel 4.200 from the front slot
+    #                                           + 1.45/2)
     #       Until 2026-07-20 the board read 0.695 for the front slot, i.e.
     #       1.415mm too far north, which hung the front shell pad 0.105mm OFF
     #       the board and produced the 2 copper_edge_clearance errors that the
@@ -461,8 +463,9 @@ def main():
                 if abs(got - want) > 0.05:
                     fail(f"J3 {what} is {got:.3f}, expected {want:.3f} "
                          f"(HRO drawing, tol +-0.05)")
-            # (c) the SMT land sits where out/j3-land put it (heel +0.250 /
-            #     toe +0.350 against the measured 0.850mm solder foot)
+            # (c) the SMT land sits where archive/proofs/j3-land put it
+            #     (heel +0.250 / toe +0.350 against the measured 0.850mm
+            #     solder foot)
             row = pads.get("A1")
             if row is None:
                 fail("J3 pad A1 missing")

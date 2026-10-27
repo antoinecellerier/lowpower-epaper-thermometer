@@ -550,15 +550,15 @@ def write_dru(alias):
         f.write("(rule hv-clearance-j4\n"
                 "  (condition \"A.memberOfFootprint('J4') && B.memberOfFootprint('J4')\")\n"
                 "  (constraint clearance (min 0.18mm)))\n")
-        # (No J3 edge_clearance exception. The former 'edge-clearance-usb-c' rule
-        # waived 2 copper_edge_clearance errors on the front shell pads, which
-        # were the SYMPTOM of a placement error, not a property of an edge-launch
-        # part: out/j3-datum/ showed HRO's "5.79" datum lands on the NPTH post
-        # centreline, so J3 belonged 1.415mm further south. Before the move the
-        # front shell pad hung 0.105mm OFF the board edge and its drill left a
-        # 0.095mm web; after it, the web is 1.510mm and both violations vanish on
-        # their own. Do not reinstate -- a J3 edge_clearance error now means the
-        # placement regressed.)
+        # (No J3 edge_clearance exception. The former 'edge-clearance-usb-c'
+        # rule waived 2 copper_edge_clearance errors on the front shell pads,
+        # which were the SYMPTOM of a placement error, not a property of an
+        # edge-launch part: archive/proofs/j3-datum/ showed HRO's "5.79" datum
+        # lands on the NPTH post centreline, so J3 belonged 1.415mm further
+        # south. Before the move the front shell pad hung 0.105mm OFF the board
+        # edge and its drill left a 0.095mm web; after it, the web is 1.510mm
+        # and both violations vanish on their own. Do not reinstate -- a J3
+        # edge_clearance error now means the placement regressed.)
         # Global hole-to-hole is 0.5mm (JLC). Relax it to 0.25mm between holes
         # of the SAME net: a drill-breakout there can only merge already-common
         # copper, so there is no short risk (JLC accepts same-net hole spacing

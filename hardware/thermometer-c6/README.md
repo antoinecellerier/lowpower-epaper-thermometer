@@ -22,6 +22,7 @@ charging, LDO power tree. Design driven by the PPK2 measurement campaign in
 | [ROUTER-NOTES.md](ROUTER-NOTES.md) | The retired greedy A* router | historical |
 | [PATHFINDER-NOTES.md](PATHFINDER-NOTES.md) | Negotiated-congestion router experiment, not adopted | historical |
 | [archive/](archive/README.md) | Hand-routed snapshots, the 2026-07-20 order as uploaded, worktree patches | record |
+| [archive/proofs/](archive/proofs/README.md) | STEP, drawing and annotated-render proofs behind the J3/J4 respins | record |
 | [archive/bringup-rev-a-first-article.md](archive/bringup-rev-a-first-article.md) | Rev A first article on board 1, Phases 0–2 and the Phase 3 items closed since | record |
 | [../datasheets/](../datasheets/README.md) | Panel and carrier vendor PDFs, panel readback findings | reference |
 
@@ -239,10 +240,10 @@ not margin.
 - The FPC-05FB is a rear-flip connector. The SMT contact tails and pad row sit
   at the REAR (actuator) face; the mouth and cable entry are on the far side,
   4.95mm from the pad centers. Body depth is 5.40 per the XUNPU drawing and a
-  VERTEX_POINT-only STEP bbox (`out/j3-land/` §7, 2026-07-20). The earlier
-  6.55 (also quoted as 6.6) came from bounding-boxing raw CARTESIAN_POINTs,
-  which include
-  LINE/AXIS2_PLACEMENT_3D entities that own no geometry.
+  VERTEX_POINT-only STEP bbox (`archive/proofs/j3-land/` §7, 2026-07-20). The
+  earlier 6.55 (also quoted as 6.6) came from bounding-boxing raw
+  CARTESIAN_POINTs, which include LINE/AXIS2_PLACEMENT_3D entities that own no
+  geometry.
 - On the board J4 is placed at rot 90 with the tail/pad column WEST (x41.45)
   and the mouth EAST at x46.40, so the panel cable approaches from the east
   edge. The mouth sits 1.60mm inboard of the edge rather than flush. That is
@@ -294,7 +295,7 @@ Sign-off items and follow-up phases, all dispositioned. The bench queue is
 | Reverse-polarity protection | Q6 AO3401A P-FET at the JST ("Why these choices") blocks a reversed cell; keyed JST + silk stay the first line of defense; body diode 0.4259V diode-mode pass on board 1 (Phase 0) | — |
 | EPD SPI/control series resistors omitted | Closed by construction: boards fabbed without them, firmware floats the pins when the panel is gated off (src/Display.cpp), first render passed on board 1 (Phase 2); see SCHEMATIC-VERIFICATION.md | — |
 | JST-PH polarity | DMM on the loose plug: red wire / + contact mates with J1's `+`-marked pad (Phase 0). JST vs Adafruit convention still differs; re-check any new pigtail | 2026-07-29 |
-| FPC footprint | Hand-drawn `local:XUNPU_FPC-05FB-24PH20` (BOM section), respun 2026-07-19 after a numeric STEP proof (`out/j4-proof/`), body depth corrected to 5.40 | 2026-07-20 |
+| FPC footprint | Hand-drawn `local:XUNPU_FPC-05FB-24PH20` (BOM section), respun 2026-07-19 after a numeric STEP proof (`archive/proofs/j4-proof/`), body depth corrected to 5.40 | 2026-07-20 |
 | FPC placement and pin 1 | 75/75 placements verified pre-order ([`archive/order-2026-07-20/`](archive/order-2026-07-20/)); J4 pin-1 north / mouth-east confirmed by continuity on board 1 (Phase 0) | 2026-07-29 |
 | 32k crystal populated by default | On the ordered boards and oscillating on board 1 (no RTC fallback warning in the boot log); cold start is a [`BRINGUP.md`](BRINGUP.md) Phase 3 item | — |
 | Old Copilot draft | `hardware/kicad/` was never merged and exists only on the unmerged branch `hardware/custom-esp32c6-pcb`. Nothing in the tree to delete; whether to delete that branch is still open | — |

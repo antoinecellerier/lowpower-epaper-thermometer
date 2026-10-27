@@ -28,6 +28,11 @@ the commit the section attaches to the work.
 | [2026-07-20 cleanup-round](#hand-routed-2026-07-20-cleanup-roundkicad_pcb) | e567982 | C14 re-placed; +3V3 staircase straightened; 2 zero-length stubs deleted; silk cleanup | DRC REAL=0, DEFERRED=0, unconnected=0, schematic-parity=0; silk 0 violations; 2 J3 edge waivers remain |
 | [2026-07-20 corner-round-usb-reroute](#hand-routed-2026-07-20-corner-round-usb-reroutekicad_pcb) | a93ffa9 (the section's commit) | corner-round and USB reroute pass; button-row move; RST/BOOT/back-footer silk; the last snapshot before the order | 0 unconnected, DRC REAL=0 and DEFERRED=0 at full severity |
 
+## Part geometry proofs
+
+[`proofs/`](proofs/README.md) holds the STEP, drawing and annotated-render
+proofs behind the J3 and J4 respins, one directory per claim.
+
 ## hand-routed-2026-07-12.kicad_pcb
 
 The user's complete GUI hand-routing of M5, verbatim as routed (copied from
@@ -360,7 +365,7 @@ their engineer reads it) are §8 and [§3](../ORDERING.md#3-assembly-options).
   model issue and that their engineer corrects it, with DFM pausing the job
   rather than proceeding. A PCBA remark asks them to place to the land
   pattern and not silently adjust it.
-  - Datum, as built (respin 2026-07-20, `out/j3-datum/`: datasheet
+  - Datum, as built (respin 2026-07-20, `archive/proofs/j3-datum/`: datasheet
     content-stream parse, 1200dpi raster and STEP, three methods agreeing to
     ≤0.005mm). HRO's `5.79` is PCB edge → ⌀0.60 NPTH post centreline, not to
     the pad row, and `4.18` is shell-slot centre to shell-slot centre. The
@@ -368,10 +373,10 @@ their engineer reads it) are §8 and [§3](../ORDERING.md#3-assembly-options).
     been 1.415mm too far north, fixed as `PLACE["J3"]` y 1.745 → 3.160.
     Intended mouth overhang 0.490 = HRO's 2.600 − 2.110. Gerber cross-check
     against HRO: 2.110 (2.1078), 6.290 (6.2794).
-  - Land, as built (`out/j3-land/`, solder foot isolated from the STEP by
-    colour, planarity and z=0, measured 0.850mm). The stock KiCad land left
-    +0.080mm heel protrusion (below IPC-7351B *Least* 0.25, negative under
-    the tolerance stack) while spending +0.520 on toe. The footprint is a
+  - Land, as built (`archive/proofs/j3-land/`, solder foot isolated from the
+    STEP by colour, planarity and z=0, measured 0.850mm). The stock KiCad land
+    left +0.080mm heel protrusion (below IPC-7351B *Least* 0.25, negative
+    under the tolerance stack) while spending +0.520 on toe. The footprint is a
     project fork, `local:USB_C_Receptacle_HRO_TYPE-C-31-M-12`, SMT row shifted
     0.170mm toward the mouth, NPTH posts 0.65 → 0.60mm (HRO's own value; it
     makes the shift legal at the 0.25mm `hole_clearance` rule). Result: heel

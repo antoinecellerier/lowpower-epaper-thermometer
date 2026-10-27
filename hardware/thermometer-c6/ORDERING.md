@@ -48,7 +48,7 @@ the J3 datum and land derivation is recorded there too.
 |---|---|---|---|
 | `JLCJLCJLCJLC` order-mark token under "Remove Mark" | 2026-07-18 | Token deleted from `generator/pcb_layout.py`: per JLC support the order-number-at-a-specified-position service "is already unavailable", so the token risked only printing literally on back silk | 2026-07-20 |
 | J4 (FPC-05FB) geometry and routing | 2026-07-18 | Re-placed mouth-east; pads renumbered, pad 1 = panel circuit 1 north, `circuit.py` unchanged; depth 5.40 (README "BOM"); fanout re-routed, DRC clean; pin 1 and mouth continuity-verified on board 1 | respin 2026-07-19, depth corrected 2026-07-20 |
-| J3 (USB-C) orientation | 2026-07-18 | Re-placed mouth-north (`out/j3-proof/`): the rot-0 placement faced the mouth into the board, masked by a 3D model mis-registered 180° | respin 2026-07-19 |
+| J3 (USB-C) orientation | 2026-07-18 | Re-placed mouth-north (`archive/proofs/j3-proof/`): the rot-0 placement faced the mouth into the board, masked by a 3D model mis-registered 180° | respin 2026-07-19 |
 | J3 (USB-C) datum, land and routing | 2026-07-20 | Datum moved 1.415mm south and the land forked; copper re-routed, 0 unconnected, 0 dangling; the ~1.3mm preview offset is a JLC model-seating artifact. As built: the archive known items above | respin 2026-07-20 |
 | D1 (CHG LED) CPL delta reset to 0 by the J3 reroute (rot 90 → 180), voiding its 2026-07-18 LED_0603 preview verification | 2026-07-20 | Resolved without a re-walk: its `0` was preview-verified 2026-07-18 (cathode cue S), and a rotation delta corrects a footprint↔library convention offset, so it is independent of the placement change. | 2026-07-20 |
 

@@ -79,7 +79,8 @@ COMPONENTS = [
     # ---- C: USB-C + charger + load sharing ----
     dict(ref="J3", lib_id="Connector:USB_C_Receptacle_USB2.0_16P", value="USB-C",
          # local fork of the stock KiCad land: SMT row 0.170mm toward the mouth
-         # (heel +0.080 -> +0.250) + NPTH 0.65 -> 0.60. See out/j3-land/.
+         # (heel +0.080 -> +0.250) + NPTH 0.65 -> 0.60.
+         # See archive/proofs/j3-land/.
          footprint="local:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
          lcsc="C165948", zone="C: USB-C + charger"),
     dict(ref="R1", lib_id="Device:R", value="5.1k", footprint=R0402,

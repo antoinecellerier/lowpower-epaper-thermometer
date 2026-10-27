@@ -75,10 +75,11 @@ PLACE = {
     "C3": (11.37, 22.52, 90),
     "C4": (8.11, 23.95, 90),
     "TP4": (11.37, 23.295, 0, "B"),
-    # Datum-correct per out/j3-datum/: HRO's "5.79" is PCB EDGE -> NPTH post
-    # CENTRELINE, and "4.18" is shell-slot centre to shell-slot centre, so the
-    # front shell slot belongs 2.11mm from the edge (not 0.695). Aligning both
-    # shell-slot rows on nominal gives exactly +1.415mm south for each.
+    # Datum-correct per archive/proofs/j3-datum/: HRO's "5.79" is PCB EDGE ->
+    # NPTH post CENTRELINE, and "4.18" is shell-slot centre to shell-slot
+    # centre, so the front shell slot belongs 2.11mm from the edge (not 0.695).
+    # Aligning both shell-slot rows on nominal gives exactly +1.415mm south for
+    # each.
     "J3": (23.4, 3.160, 180),
     "R1": (21.98, 10.63, 270),
     "R2": (20.79, 10.63, 270),
@@ -493,12 +494,13 @@ MODELS_3D = {
         # pads-west / mouth-east (rot 90), so the model seats mouth-east.
         # oy=1.825 registers THREE independent features exactly (err 0.000 on
         # each), against the footprint's corrected outline: rear/actuator wall
-        # on F.Fab -2.075, mouth face on F.Fab +3.325, and the gold feet centred
-        # on the pad row at -1.625. The former 1.35 was fitted against the
-        # 7.05mm-deep body outline that the raw-CARTESIAN_POINT bbox artifact
-        # produced (out/j3-land/ section 7), and it sat the whole model 0.475mm
-        # east -- far enough that the feet (local -1.500..-0.800) hung off the
-        # south end of their own 1.2mm pads (-2.225..-1.025).
+        # on F.Fab -2.075, mouth face on F.Fab +3.325, and the gold feet
+        # centred on the pad row at -1.625. The former 1.35 was fitted against
+        # the 7.05mm-deep body outline that the raw-CARTESIAN_POINT bbox
+        # artifact produced (archive/proofs/j3-land/ section 7), and it sat the
+        # whole model 0.475mm east -- far enough that the feet (local
+        # -1.500..-0.800) hung off the south end of their own 1.2mm pads
+        # (-2.225..-1.025).
         ("XUNPU_FPC-05FB-24PH20.step", (0, 1.825, 0), (0, 0, 0), (1, 1, 1)),
     "local:SW_TS-1187A":
         ("SW_TS-1187A.step", (0, 0, 0), (0, 0, 0), (1, 1, 1)),
@@ -518,8 +520,8 @@ MODELS_3D = {
         # 7.410 inside the 6.310..7.760 pad, i.e. heel +0.250 / toe +0.350, so
         # pegs, posts AND feet register simultaneously. (The former -0.94 was a
         # compromise splitting 0.22mm between pegs and feet; that 0.22mm WAS the
-        # land error the out/j3-land pad shift removes.) Measured from FACE
-        # VERTICES only -- a raw CARTESIAN_POINT bbox picks up LINE /
+        # land error the archive/proofs/j3-land pad shift removes.) Measured
+        # from FACE VERTICES only -- a raw CARTESIAN_POINT bbox picks up LINE /
         # AXIS2_PLACEMENT_3D parameterisation origins that own no geometry.
         ("USB_C_Receptacle_HRO_TYPE-C-31-M-12.step", (0, -1.050, 0), (0, 0, 180), (1, 1, 1)),
 }
